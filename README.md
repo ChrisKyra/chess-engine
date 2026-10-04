@@ -8,8 +8,6 @@ version history of `Engine_10/README.md`.
 ```
 Chess Engine/
 ├── Engine_10/             current engine  — "Bitboard Engine 10"
-├── Engine_9_Repetition/   previous engine — "Bitboard Engine 9 (Repetition)", kept to test against (local only)
-├── Engine_8_Contempt/     older engine    — "Bitboard Engine 8 (Contempt)" (local only)
 ├── gui/                   C# / Avalonia GUI: play, analyse, and run Engine vs Engine matches
 └── tools/match-runner/    command-line matches (SPRT, adjudication) and tuning data generation
 ```
