@@ -1,0 +1,8 @@
+# Build output: recreated by `make` (engines) and `dotnet build` / build-mac-app.sh (GUI).
+Engine_*/engine
+*.o
+bin/
+obj/
+
+# macOS
+.DS_Store

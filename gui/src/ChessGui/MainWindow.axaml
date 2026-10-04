@@ -1,0 +1,492 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:ChessGui"
+        x:Class="ChessGui.MainWindow"
+        Title="Chess GUI"
+        Width="1240" Height="880" MinWidth="920" MinHeight="640"
+        Background="#1E1D1B">
+
+  <Window.Styles>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="#2A2825" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="14" />
+    </Style>
+    <Style Selector="TextBlock.heading">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="#9C978F" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="#9C978F" />
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#CFCBC4" />
+    </Style>
+    <Style Selector="TextBlock.score">
+      <Setter Property="FontSize" Value="26" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="MinWidth" Value="96" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.card Button">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.card ComboBox, Border.card NumericUpDown, Expander ComboBox">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <!-- Numbers fill their fixed-width column and align right inside it, so the cell never resizes. -->
+    <Style Selector="TextBlock.count">
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="TextAlignment" Value="Right" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.columnHead">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="#9C978F" />
+      <Setter Property="TextAlignment" Value="Right" />
+    </Style>
+    <Style Selector="Button.start, Button.quit">
+      <Setter Property="Height" Value="42" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.start">
+      <Setter Property="Background" Value="#4A8A3F" />
+    </Style>
+    <Style Selector="Button.start:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#579B4B" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="Button.quit">
+      <Setter Property="Background" Value="#A8433A" />
+    </Style>
+    <Style Selector="Button.quit:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#BC5147" />
+      <Setter Property="Foreground" Value="White" />
+    </Style>
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="Padding" Value="12,0" />
+    </Style>
+
+    <Style Selector="ListBox.log ListBoxItem">
+      <Setter Property="Padding" Value="6,1" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+  </Window.Styles>
+
+  <Grid ColumnDefinitions="*,410" Margin="18">
+
+    <!-- Captured pieces (during matches), then the board with a player bar above and below -->
+    <Grid Grid.Column="0" ColumnDefinitions="Auto,*">
+    <Grid x:Name="CapturedPanel" Grid.Column="0" Width="132" Margin="0,0,14,0" RowDefinitions="*,*" IsVisible="False">
+      <StackPanel Grid.Row="0" VerticalAlignment="Top" Margin="0,44,0,0" Spacing="6">
+        <TextBlock x:Name="TopCapturedHeading" Classes="heading" />
+        <local:CapturedPiecesView x:Name="TopCaptured" />
+        <TextBlock x:Name="TopAdvantage" FontSize="18" FontWeight="Bold" Foreground="#9FD38A" />
+      </StackPanel>
+      <StackPanel Grid.Row="1" VerticalAlignment="Bottom" Margin="0,0,0,44" Spacing="6">
+        <TextBlock x:Name="BottomAdvantage" FontSize="18" FontWeight="Bold" Foreground="#9FD38A" />
+        <local:CapturedPiecesView x:Name="BottomCaptured" />
+        <TextBlock x:Name="BottomCapturedHeading" Classes="heading" />
+      </StackPanel>
+    </Grid>
+    <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto">
+      <Grid x:Name="TopBar" Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,10" HorizontalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <Ellipse x:Name="TopSwatch" Width="14" Height="14" Stroke="#9C978F" StrokeThickness="1" />
+          <TextBlock x:Name="TopName" FontSize="16" FontWeight="SemiBold" />
+          <TextBlock x:Name="TopThinking" Classes="muted" VerticalAlignment="Center" />
+        </StackPanel>
+        <TextBlock x:Name="TopClock" Grid.Column="1" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
+                   FontFamily="Menlo, Consolas, monospace" />
+      </Grid>
+
+      <local:BoardView x:Name="Board" Grid.Row="1" />
+
+      <Grid x:Name="BottomBar" Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,10,0,0" HorizontalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <Ellipse x:Name="BottomSwatch" Width="14" Height="14" Stroke="#9C978F" StrokeThickness="1" />
+          <TextBlock x:Name="BottomName" FontSize="16" FontWeight="SemiBold" />
+          <TextBlock x:Name="BottomThinking" Classes="muted" VerticalAlignment="Center" />
+        </StackPanel>
+        <TextBlock x:Name="BottomClock" Grid.Column="1" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
+                   FontFamily="Menlo, Consolas, monospace" />
+      </Grid>
+    </Grid>
+
+    </Grid>
+
+    <!-- Side panel: status on top, then Game and Engines tabs -->
+    <Grid Grid.Column="1" Margin="18,0,0,0" RowDefinitions="Auto,*">
+      <!-- Fixed-height lines, so a longer or shorter status never shifts the tabs below. -->
+      <Border Classes="card">
+        <StackPanel Spacing="4">
+          <TextBlock x:Name="StatusText" FontSize="18" FontWeight="SemiBold" Height="48"
+                     TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+          <SelectableTextBlock x:Name="MessageText" FontSize="12" Height="48"
+                               TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+      </Border>
+
+      <TabControl x:Name="SideTabs" Grid.Row="1" Margin="0,6,0,0" Padding="0,6,0,0">
+
+        <TabItem Header="Game">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="12" Margin="0,0,6,0">
+
+              <Border Classes="card">
+                <StackPanel Spacing="10">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Classes="heading" Text="EVALUATION  (WHITE'S POINT OF VIEW)" VerticalAlignment="Center" />
+                    <CheckBox x:Name="ArrowCheck" Grid.Column="1" Content="Arrow" MinHeight="0"
+                              IsCheckedChanged="OnArrowChanged"
+                              ToolTip.Tip="Draw the best move of the engine that is thinking or analysing" />
+                  </Grid>
+
+                  <!-- Both rows are always shown and every line has a fixed height, so the card never resizes. -->
+                  <StackPanel x:Name="Eval1Row" Spacing="2">
+                    <Grid ColumnDefinitions="*,170" Height="20">
+                      <TextBlock x:Name="Eval1Name" FontWeight="SemiBold" VerticalAlignment="Center" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                      <TextBlock x:Name="Eval1Role" Grid.Column="1" Classes="muted" VerticalAlignment="Center" TextAlignment="Right" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                    <Grid ColumnDefinitions="108,*" Height="38">
+                      <TextBlock x:Name="Eval1Score" Classes="score" Text="—" MaxLines="1" />
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Name="Eval1Depth" Classes="muted" Height="16" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="Eval1Nodes" Classes="muted" Height="16" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                    </Grid>
+                    <SelectableTextBlock x:Name="Eval1Pv" FontSize="13" Height="36" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+
+                  <Border x:Name="EvalDivider" Height="1" Background="#3A3834" />
+
+                  <StackPanel x:Name="Eval2Row" Spacing="2">
+                    <Grid ColumnDefinitions="*,170" Height="20">
+                      <TextBlock x:Name="Eval2Name" FontWeight="SemiBold" VerticalAlignment="Center" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                      <TextBlock x:Name="Eval2Role" Grid.Column="1" Classes="muted" VerticalAlignment="Center" TextAlignment="Right" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                    <Grid ColumnDefinitions="108,*" Height="38">
+                      <TextBlock x:Name="Eval2Score" Classes="score" Text="—" MaxLines="1" />
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Name="Eval2Depth" Classes="muted" Height="16" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="Eval2Nodes" Classes="muted" Height="16" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                    </Grid>
+                    <SelectableTextBlock x:Name="Eval2Pv" FontSize="13" Height="36" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Classes="card">
+                <StackPanel Spacing="10">
+                  <TextBlock Classes="heading" Text="GAME" />
+                  <Grid x:Name="GameSetupGrid" ColumnDefinitions="92,*" RowDefinitions="Auto,8,Auto">
+                    <TextBlock Classes="label" Text="White" />
+                    <ComboBox x:Name="WhitePlayerBox" Grid.Column="1" SelectionChanged="OnPlayersChanged">
+                      <ComboBoxItem>Human</ComboBoxItem>
+                      <ComboBoxItem>Engine 1</ComboBoxItem>
+                      <ComboBoxItem>Engine 2</ComboBoxItem>
+                    </ComboBox>
+
+                    <TextBlock Classes="label" Grid.Row="2" Text="Black" />
+                    <ComboBox x:Name="BlackPlayerBox" Grid.Row="2" Grid.Column="1" SelectionChanged="OnPlayersChanged">
+                      <ComboBoxItem>Human</ComboBoxItem>
+                      <ComboBoxItem>Engine 1</ComboBoxItem>
+                      <ComboBoxItem>Engine 2</ComboBoxItem>
+                    </ComboBox>
+
+                  </Grid>
+                  <TextBlock Classes="muted" TextWrapping="Wrap"
+                             Text="Each engine decides for itself how long to think; set it inside the engine. Engines can't be changed while a game is in progress." />
+
+                  <Grid ColumnDefinitions="*,8,*">
+                    <Button x:Name="StartButton" Classes="start" Content="Start" Click="OnStart"
+                            ToolTip.Tip="Begin the game: only then can moves be made and engines calculate" />
+                    <Button x:Name="QuitButton" Grid.Column="2" Classes="quit" Content="Quit" Click="OnQuit"
+                            ToolTip.Tip="Stop the game and every engine calculation immediately" />
+                  </Grid>
+
+                  <Grid ColumnDefinitions="*,8,*,8,*" RowDefinitions="Auto,8,Auto">
+                    <Button x:Name="NewGameButton" Content="New game" Click="OnNewGame" ToolTip.Tip="Set up a new game (⌘N / Ctrl+N), then press Start" />
+                    <Button x:Name="UndoButton" Grid.Column="2" Content="Undo" Click="OnUndo" ToolTip.Tip="⌘Z / Ctrl+Z" />
+                    <Button Grid.Column="4" Content="Flip" Click="OnFlip" ToolTip.Tip="F" />
+                    <Button x:Name="EngineMoveButton" Grid.Row="2" Content="Engine move" Click="OnEngineMove"
+                            ToolTip.Tip="Let an engine play the side to move" />
+                    <Button x:Name="PauseButton" Grid.Row="2" Grid.Column="2" Content="Pause" Click="OnPause" />
+                    <Button x:Name="SwapSidesButton" Grid.Row="2" Grid.Column="4" Content="Swap sides" Click="OnSwapSides"
+                            ToolTip.Tip="Exchange the White and Black players" />
+                  </Grid>
+                </StackPanel>
+              </Border>
+
+              <Border Classes="card">
+                <StackPanel Spacing="6">
+                  <TextBlock Classes="heading" Text="MOVES" />
+                  <ScrollViewer x:Name="MovesScroll" Height="170">
+                    <ItemsControl x:Name="MovesList">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="local:MoveRow">
+                          <Grid ColumnDefinitions="44,*,*" Height="26">
+                            <TextBlock Classes="muted" Text="{Binding Number}" VerticalAlignment="Center" />
+                            <Border Grid.Column="1" Background="{Binding WhiteBackground}" CornerRadius="3" Margin="0,1,6,1" Padding="6,0">
+                              <TextBlock Text="{Binding White}" VerticalAlignment="Center" />
+                            </Border>
+                            <Border Grid.Column="2" Background="{Binding BlackBackground}" CornerRadius="3" Margin="0,1,6,1" Padding="6,0">
+                              <TextBlock Text="{Binding Black}" VerticalAlignment="Center" />
+                            </Border>
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+                </StackPanel>
+              </Border>
+
+              <Border Classes="card">
+                <StackPanel Spacing="8">
+                  <TextBlock Classes="heading" Text="POSITION" />
+                  <TextBox x:Name="FenBox" FontSize="12" TextWrapping="Wrap" Watermark="FEN" />
+                  <Grid ColumnDefinitions="*,8,*,8,*">
+                    <Button x:Name="SetPositionButton" Content="Set position" Click="OnSetPosition" ToolTip.Tip="Start a new game from the FEN above" />
+                    <Button Grid.Column="2" Content="Copy FEN" Click="OnCopyFen" />
+                    <Button Grid.Column="4" Content="Copy PGN" Click="OnCopyPgn" />
+                  </Grid>
+                </StackPanel>
+              </Border>
+
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <TabItem Header="Engines">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="12" Margin="0,0,6,0">
+
+              <Border Classes="card">
+                <StackPanel Spacing="8">
+                  <TextBlock Classes="heading" Text="ENGINE 1" />
+                  <TextBlock x:Name="Engine1Name" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <TextBlock x:Name="Engine1Path" Classes="muted" TextWrapping="Wrap" />
+                  <TextBox x:Name="Engine1Args" Watermark="Command-line arguments (optional)" />
+                  <Grid ColumnDefinitions="*,8,*,8,*">
+                    <Button x:Name="Engine1Load" Tag="0" Content="Load…" Click="OnLoadEngine" />
+                    <Button x:Name="Engine1Reload" Tag="0" Grid.Column="2" Content="Reload" Click="OnReloadEngine"
+                            ToolTip.Tip="Restart the engine, e.g. after rebuilding it" />
+                    <Button x:Name="Engine1Unload" Tag="0" Grid.Column="4" Content="Unload" Click="OnUnloadEngine" />
+                  </Grid>
+                  <CheckBox x:Name="Engine1Analyse" Tag="0" Content="Analyse when not playing a move"
+                            IsCheckedChanged="OnAnalyseChanged"
+                            ToolTip.Tip="Search the current position continuously. The engine must stop when told to (UCI 'stop')." />
+                </StackPanel>
+              </Border>
+
+              <Border Classes="card">
+                <StackPanel Spacing="8">
+                  <TextBlock Classes="heading" Text="ENGINE 2" />
+                  <TextBlock x:Name="Engine2Name" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <TextBlock x:Name="Engine2Path" Classes="muted" TextWrapping="Wrap" />
+                  <TextBox x:Name="Engine2Args" Watermark="Command-line arguments (optional)" />
+                  <Grid ColumnDefinitions="*,8,*,8,*">
+                    <Button x:Name="Engine2Load" Tag="1" Content="Load…" Click="OnLoadEngine" />
+                    <Button x:Name="Engine2Reload" Tag="1" Grid.Column="2" Content="Reload" Click="OnReloadEngine"
+                            ToolTip.Tip="Restart the engine, e.g. after rebuilding it" />
+                    <Button x:Name="Engine2Unload" Tag="1" Grid.Column="4" Content="Unload" Click="OnUnloadEngine" />
+                  </Grid>
+                  <CheckBox x:Name="Engine2Analyse" Tag="1" Content="Analyse when not playing a move"
+                            IsCheckedChanged="OnAnalyseChanged"
+                            ToolTip.Tip="Search the current position continuously. The engine must stop when told to (UCI 'stop')." />
+                </StackPanel>
+              </Border>
+
+              <Expander Header="Engine options" HorizontalAlignment="Stretch">
+                <StackPanel Spacing="8">
+                  <ComboBox x:Name="OptionsEngineBox" SelectionChanged="OnOptionsEngineChanged">
+                    <ComboBoxItem>Engine 1</ComboBoxItem>
+                    <ComboBoxItem>Engine 2</ComboBoxItem>
+                  </ComboBox>
+                  <StackPanel x:Name="OptionsPanel" Spacing="8" />
+                </StackPanel>
+              </Expander>
+
+              <Expander x:Name="LogExpander" Header="UCI log" HorizontalAlignment="Stretch">
+                <StackPanel Spacing="8">
+                  <ListBox x:Name="LogList" Classes="log" Height="260" FontSize="11"
+                           FontFamily="Menlo, Consolas, DejaVu Sans Mono, monospace" />
+                  <Grid ColumnDefinitions="110,8,*">
+                    <ComboBox x:Name="CommandEngineBox">
+                      <ComboBoxItem>Engine 1</ComboBoxItem>
+                      <ComboBoxItem>Engine 2</ComboBoxItem>
+                    </ComboBox>
+                    <TextBox x:Name="CommandBox" Grid.Column="2" FontFamily="Menlo, Consolas, DejaVu Sans Mono, monospace" FontSize="12"
+                             Watermark="Raw command (Enter), e.g. d" KeyDown="OnCommandKeyDown" />
+                  </Grid>
+                </StackPanel>
+              </Expander>
+
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+
+        <TabItem Header="Match">
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="12" Margin="0,0,6,0">
+
+              <Border Classes="card">
+                <StackPanel Spacing="10">
+                  <TextBlock Classes="heading" Text="ENGINE MATCH" />
+                  <TextBlock x:Name="MatchPairing" FontSize="15" FontWeight="SemiBold" Height="22"
+                             MaxLines="1" TextTrimming="CharacterEllipsis" />
+                  <StackPanel x:Name="MatchSetupPanel" Spacing="10">
+                  <Grid ColumnDefinitions="*,150" RowDefinitions="Auto,8,Auto,8,Auto,8,Auto,8,Auto,8,Auto">
+                    <TextBlock Classes="label" Text="Number of games (maximum with SPRT)" TextWrapping="Wrap" />
+                    <NumericUpDown x:Name="MatchGamesBox" Grid.Column="1" Minimum="2" Maximum="100000" Increment="100"
+                                   FormatString="0" ValueChanged="OnMatchSetupChanged" />
+                    <TextBlock Classes="label" Grid.Row="2" Text="Time control" />
+                    <ComboBox x:Name="TimeControlBox" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
+                              SelectionChanged="OnTimeControlKindChanged">
+                      <ComboBoxItem>Engine decides</ComboBoxItem>
+                      <ComboBoxItem>Time per move</ComboBoxItem>
+                      <ComboBoxItem>Clock</ComboBoxItem>
+                      <ComboBoxItem>Nodes per move</ComboBoxItem>
+                    </ComboBox>
+                    <TextBlock x:Name="TimeValueLabel" Classes="label" Grid.Row="4" TextWrapping="Wrap" />
+                    <NumericUpDown x:Name="TimeValueBox" Grid.Row="4" Grid.Column="1" Minimum="0" Maximum="100000000"
+                                   ValueChanged="OnMatchSetupChanged" />
+                    <TextBlock x:Name="IncrementLabel" Classes="label" Grid.Row="6" Text="Increment per move (seconds)" TextWrapping="Wrap" />
+                    <NumericUpDown x:Name="IncrementBox" Grid.Row="6" Grid.Column="1" Minimum="0" Maximum="600" Increment="0.05"
+                                   FormatString="0.###" ValueChanged="OnMatchSetupChanged" />
+                    <TextBlock Classes="label" Grid.Row="8" Text="Random moves after the opening" TextWrapping="Wrap" />
+                    <NumericUpDown x:Name="MatchRandomBox" Grid.Row="8" Grid.Column="1" Minimum="0" Maximum="8" Increment="1"
+                                   FormatString="0" ValueChanged="OnMatchSetupChanged" />
+                    <TextBlock Classes="label" Grid.Row="10" Text="Games at once" TextWrapping="Wrap" />
+                    <NumericUpDown x:Name="MatchParallelBox" Grid.Row="10" Grid.Column="1" Minimum="1" Maximum="16" Increment="1"
+                                   FormatString="0" ValueChanged="OnMatchSetupChanged" />
+                  </Grid>
+                  <TextBlock x:Name="TimeControlHelp" Classes="muted" TextWrapping="Wrap" />
+                  <Grid ColumnDefinitions="Auto,8,120,16,Auto,8,120,*" RowDefinitions="Auto,8,Auto">
+                    <TextBlock Classes="label" Text="SPRT   H0" />
+                    <NumericUpDown x:Name="SprtElo0Box" Grid.Column="2" Minimum="-100" Maximum="100" Increment="1"
+                                   FormatString="0.#" ValueChanged="OnMatchSetupChanged" />
+                    <TextBlock Classes="label" Grid.Column="4" Text="H1" />
+                    <NumericUpDown x:Name="SprtElo1Box" Grid.Column="6" Minimum="-99" Maximum="200" Increment="1"
+                                   FormatString="0.#" ValueChanged="OnMatchSetupChanged" />
+                    <CheckBox x:Name="SprtStopCheck" Grid.Row="2" Grid.ColumnSpan="8" Content="Stop the match when the SPRT decides"
+                              IsCheckedChanged="OnSprtStopChanged" />
+                  </Grid>
+                  </StackPanel>
+                  <TextBlock Classes="muted" TextWrapping="Wrap"
+                             Text="Colours alternate every game, and each opening is played twice so both engines get it as White. The SPRT tests whether Engine 1 is at least H1 Elo stronger than Engine 2 (accept H1) or at most H0 (accept H0), with 5% error either way, counting each opening's pair of games together. Random moves after the opening are any legal move, blunders included: leave them at 0 unless the match is longer than 586 games. Several games at once run a separate pair of engine processes per game; only the first game is shown on the board." />
+                  <Grid ColumnDefinitions="*,8,*">
+                    <Button x:Name="MatchStartButton" Content="Start match" Click="OnStartMatch" />
+                    <Button x:Name="MatchStopButton" Grid.Column="2" Content="Stop match" Click="OnStopMatch" />
+                  </Grid>
+                  <ProgressBar x:Name="MatchProgress" Minimum="0" Maximum="1000" MinHeight="6" />
+                  <TextBlock x:Name="MatchProgressText" Classes="muted" Height="18" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </Border>
+
+              <Border Classes="card">
+                <StackPanel Spacing="10">
+                  <TextBlock Classes="heading" Text="RESULTS" />
+                  <Grid ColumnDefinitions="*,48,54,50,74" RowDefinitions="Auto,8,Auto,8,Auto">
+                    <TextBlock Grid.Column="1" Classes="columnHead" Text="Wins" />
+                    <TextBlock Grid.Column="2" Classes="columnHead" Text="Losses" />
+                    <TextBlock Grid.Column="3" Classes="columnHead" Text="Draws" />
+                    <TextBlock Grid.Column="4" Classes="columnHead" Text="Score" />
+
+                    <TextBlock x:Name="ResultName1" Grid.Row="2" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="ResultWins1" Grid.Row="2" Grid.Column="1" Classes="count" Foreground="#9FD38A" />
+                    <TextBlock x:Name="ResultLosses1" Grid.Row="2" Grid.Column="2" Classes="count" Foreground="#FF8A80" />
+                    <TextBlock x:Name="ResultDraws1" Grid.Row="2" Grid.Column="3" Classes="count" />
+                    <TextBlock x:Name="ResultScore1" Grid.Row="2" Grid.Column="4" Classes="count" />
+
+                    <TextBlock x:Name="ResultName2" Grid.Row="4" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="ResultWins2" Grid.Row="4" Grid.Column="1" Classes="count" Foreground="#9FD38A" />
+                    <TextBlock x:Name="ResultLosses2" Grid.Row="4" Grid.Column="2" Classes="count" Foreground="#FF8A80" />
+                    <TextBlock x:Name="ResultDraws2" Grid.Row="4" Grid.Column="3" Classes="count" />
+                    <TextBlock x:Name="ResultScore2" Grid.Row="4" Grid.Column="4" Classes="count" />
+                  </Grid>
+                  <TextBlock x:Name="MatchElo" Height="40" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                  <TextBlock x:Name="MatchSprt" TextWrapping="Wrap" />
+                  <TextBlock x:Name="MatchPairs" Classes="muted" TextWrapping="Wrap" />
+                  <TextBlock x:Name="MatchColours" Classes="muted" Height="34" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                  <Button x:Name="MatchSavePgnButton" Content="Save games as PGN…" Click="OnSaveMatchPgn" />
+                  <SelectableTextBlock x:Name="MatchPgnPath" FontSize="11" Foreground="#9C978F" Height="30"
+                                       TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </Border>
+
+              <Border Classes="card">
+                <StackPanel Spacing="10">
+                  <TextBlock Classes="heading" Text="ENGINE SPEED" />
+                  <TextBlock x:Name="SpeedSetup" Classes="muted" TextWrapping="Wrap" />
+                  <Grid ColumnDefinitions="*,48,44,64,76,64" RowDefinitions="Auto,8,Auto,8,Auto">
+                    <TextBlock Grid.Column="1" Classes="columnHead" Text="Threads" />
+                    <TextBlock Grid.Column="2" Classes="columnHead" Text="Moves" />
+                    <TextBlock Grid.Column="3" Classes="columnHead" Text="Time/move" />
+                    <TextBlock Grid.Column="4" Classes="columnHead" Text="Nodes/move" />
+                    <TextBlock Grid.Column="5" Classes="columnHead" Text="Nodes/s" />
+
+                    <TextBlock x:Name="SpeedName1" Grid.Row="2" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="SpeedThreads1" Grid.Row="2" Grid.Column="1" Classes="count" />
+                    <TextBlock x:Name="SpeedMoves1" Grid.Row="2" Grid.Column="2" Classes="count" />
+                    <TextBlock x:Name="SpeedTime1" Grid.Row="2" Grid.Column="3" Classes="count" />
+                    <TextBlock x:Name="SpeedPerMove1" Grid.Row="2" Grid.Column="4" Classes="count" />
+                    <TextBlock x:Name="SpeedNps1" Grid.Row="2" Grid.Column="5" Classes="count" />
+
+                    <TextBlock x:Name="SpeedName2" Grid.Row="4" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="SpeedThreads2" Grid.Row="4" Grid.Column="1" Classes="count" />
+                    <TextBlock x:Name="SpeedMoves2" Grid.Row="4" Grid.Column="2" Classes="count" />
+                    <TextBlock x:Name="SpeedTime2" Grid.Row="4" Grid.Column="3" Classes="count" />
+                    <TextBlock x:Name="SpeedPerMove2" Grid.Row="4" Grid.Column="4" Classes="count" />
+                    <TextBlock x:Name="SpeedNps2" Grid.Row="4" Grid.Column="5" Classes="count" />
+                  </Grid>
+                  <TextBlock x:Name="SpeedWarning" TextWrapping="Wrap" Foreground="#FFB74D" IsVisible="False" />
+                  <TextBlock Classes="muted" TextWrapping="Wrap"
+                             Text="Means over every move each engine played in this match, from the nodes and time in its last info line before each bestmove: time per move is total thinking time divided by moves, nodes per move is total nodes divided by moves, nodes per second is total nodes divided by total time. Threads is the engine's Threads option. Engines running at the same time share the CPU, so only compare speeds between matches played with the same games at once and threads." />
+                </StackPanel>
+              </Border>
+
+              <Border Classes="card">
+                <StackPanel Spacing="10">
+                  <TextBlock Classes="heading" Text="HOW GAMES ENDED" />
+                  <Grid x:Name="EndingsGrid" ColumnDefinitions="*,56,64" />
+                  <TextBlock x:Name="MatchLength" Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+
+              <Border Classes="card">
+                <StackPanel Spacing="6">
+                  <TextBlock Classes="heading" Text="RECENT GAMES" />
+                  <ScrollViewer x:Name="MatchGamesScroll" Height="240" VerticalScrollBarVisibility="Auto">
+                  <ItemsControl x:Name="MatchGamesList">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="local:MatchGameRow">
+                        <Grid ColumnDefinitions="44,*,Auto" Height="24">
+                          <TextBlock Classes="muted" Text="{Binding Number}" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="1" Text="{Binding Description}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="2" Text="{Binding Winner}" FontSize="12" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  </ScrollViewer>
+                </StackPanel>
+              </Border>
+
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+      </TabControl>
+    </Grid>
+  </Grid>
+</Window>
