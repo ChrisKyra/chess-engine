@@ -7,7 +7,6 @@ version history of `Engine_10/README.md`.
 
 ```
 Chess Engine/
-├── Engine_11/             next engine     — "Bitboard Engine 11" (in development: evaluation tuning)
 ├── Engine_10/             current engine  — "Bitboard Engine 10"
 ├── Engine_9_Repetition/   previous engine — "Bitboard Engine 9 (Repetition)", kept to test against (local only)
 ├── Engine_8_Contempt/     older engine    — "Bitboard Engine 8 (Contempt)" (local only)

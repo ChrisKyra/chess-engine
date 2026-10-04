@@ -12,3 +12,6 @@ obj/
 # Older engine versions are kept on this computer only; the repository holds the latest engine.
 Engine_8_Contempt/
 Engine_9_Repetition/
+
+# The engine in development stays on this computer until it is finished.
+Engine_11/
