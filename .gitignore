@@ -6,3 +6,7 @@ obj/
 
 # macOS
 .DS_Store
+
+# Older engine versions are kept on this computer only; the repository holds the latest engine.
+Engine_8_Contempt/
+Engine_9_Repetition/
