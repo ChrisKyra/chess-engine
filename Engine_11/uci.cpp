@@ -320,6 +320,10 @@ int bench_depth(const std::string& text) {
 
 } // namespace
 
+#ifdef EVAL_TRACE
+namespace Tune { int run(int argc, char** argv); }   // tune.cpp
+#endif
+
 // Start-up, the shell shortcuts ("engine test", "engine bench", "engine perft")
 // and then the UCI loop: read a line, answer it, repeat until "quit" or until
 // the GUI closes the pipe.  The loop keeps reading while a search runs, which
@@ -338,6 +342,10 @@ int main(int argc, char** argv) {
     if (argc > 1) {
         std::string arg = argv[1];
         if (arg == "test") return run_perft_suite() ? 0 : 1;
+#ifdef EVAL_TRACE
+        // Only in the tuner build: "tuner tune positions.txt [epochs] [output]".
+        if (arg == "tune") return Tune::run(argc, argv);
+#endif
         if (arg == "bench") { cmd_bench(bench_depth(argc > 2 ? argv[2] : "")); return 0; }
         if (arg == "perft") {
             int64_t depth = 5;

@@ -25,7 +25,19 @@ test: $(BIN)
 bench: $(BIN)
 	./$(BIN) bench
 
+# The tuner: the engine built with the evaluation trace (EVAL_TRACE) plus the
+# Texel tuner, as a separate binary so the engine itself stays as fast as ever.
+#   make tuner && ./tuner tune positions.txt [epochs] [output]
+TUNER = tuner
+TUNER_OBJ = $(SRC:%.cpp=tuner-%.o) tuner-tune.o
+
+$(TUNER): $(TUNER_OBJ)
+	$(CXX) $(CXXFLAGS) $(NATIVE) $(LDFLAGS) -o $@ $(TUNER_OBJ)
+
+tuner-%.o: %.cpp
+	$(CXX) $(CXXFLAGS) $(NATIVE) -DEVAL_TRACE -c $< -o $@
+
 clean:
-	rm -f $(OBJ) $(BIN)
+	rm -f $(OBJ) $(BIN) $(TUNER_OBJ) $(TUNER)
 
 .PHONY: all test bench clean

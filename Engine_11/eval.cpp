@@ -2,6 +2,11 @@
 #include "movegen.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <iterator>
+#include <string>
+#include <vector>
 
 namespace Eval {
 
@@ -305,6 +310,53 @@ struct Score {
 };
 
 // ---------------------------------------------------------------------------
+// Tuning trace.
+//
+// For Texel tuning (see tune.cpp) the evaluation has to say not only what it
+// scores but how often each weight was used: then the score is a sum of
+// coefficient x weight, and the weights can be fitted to game results.  Every
+// tunable weight has an index below; TRACE(index, colour, count) records that
+// the weight counted `count` times for that colour (White positive, Black
+// negative).  Only the `tuner` build (EVAL_TRACE) records anything -- in the
+// engine the macro is empty and costs nothing.
+// ---------------------------------------------------------------------------
+
+enum TraceIndex : int {
+    T_MATERIAL = 0,                              // by piece type
+    T_PSQT = T_MATERIAL + PIECE_TYPE_NB,         // piece type * 64 + table index (a8 = 0)
+    T_BISHOP_PAIR = T_PSQT + PIECE_TYPE_NB * 64,
+    T_DOUBLED, T_ISOLATED, T_BACKWARD,
+    T_CONNECTED,                                 // by relative rank
+    T_SUPPORTED = T_CONNECTED + 8,
+    T_PASSED,                                    // by relative rank
+    T_PASSED_FREE = T_PASSED + 8,
+    T_PASSED_SAFE = T_PASSED_FREE + 8,
+    T_PASSED_BLOCKED = T_PASSED_SAFE + 8,
+    T_PASSED_KING = T_PASSED_BLOCKED + 8,
+    T_ROOK_BEHIND_PASSER = T_PASSED_KING + 8,
+    T_PASSED_UNSTOPPABLE,
+    T_MOBILITY,                                  // by piece type
+    T_ROOK_OPEN = T_MOBILITY + PIECE_TYPE_NB,
+    T_ROOK_SEMI_OPEN, T_ROOK_SEVENTH, T_KNIGHT_OUTPOST, T_BISHOP_OUTPOST,
+    T_THREAT_BY_PAWN,                            // by victim type
+    T_THREAT_BY_MINOR = T_THREAT_BY_PAWN + PIECE_TYPE_NB,
+    T_THREAT_BY_ROOK = T_THREAT_BY_MINOR + PIECE_TYPE_NB,
+    T_HANGING,
+    T_SHIELD_ADVANCED, T_SHIELD_MISSING, T_KING_FILE_SEMI_OPEN, T_KING_FILE_OPEN,
+    T_COUNT
+};
+
+#ifdef EVAL_TRACE
+thread_local double trace_coefficients[T_COUNT];
+// The totals of the last evaluation, before the phases are blended.
+thread_local struct { int mg, eg, phase, scale; } trace_totals;
+#define TRACE(index, color, count) \
+    (trace_coefficients[(index)] += ((color) == WHITE ? 1.0 : -1.0) * double(count))
+#else
+#define TRACE(index, color, count) ((void)0)
+#endif
+
+// ---------------------------------------------------------------------------
 // Pawn hash table.
 //
 // Pawn structure is expensive to work out and changes only when a pawn moves or
@@ -384,10 +436,10 @@ void compute_pawn_structure(const Position& pos, PawnEntry& e) {
         const bool stop_covered = pawn_attacks(Us, stop) & theirs;
         const bool backward = !passed && !(REAR_SPAN[Us][s] & ours) && stop_covered;
 
-        if (doubled) score.add(DOUBLED_PAWN_MG, DOUBLED_PAWN_EG);
+        if (doubled) { score.add(DOUBLED_PAWN_MG, DOUBLED_PAWN_EG); TRACE(T_DOUBLED, Us, 1); }
 
-        if (!neighbours) score.add(ISOLATED_PAWN_MG, ISOLATED_PAWN_EG);
-        else if (backward) score.add(BACKWARD_PAWN_MG, BACKWARD_PAWN_EG);
+        if (!neighbours) { score.add(ISOLATED_PAWN_MG, ISOLATED_PAWN_EG); TRACE(T_ISOLATED, Us, 1); }
+        else if (backward) { score.add(BACKWARD_PAWN_MG, BACKWARD_PAWN_EG); TRACE(T_BACKWARD, Us, 1); }
 
         if (support || phalanx) {
             int mg = CONNECTED_MG[r];
@@ -397,11 +449,14 @@ void compute_pawn_structure(const Position& pos, PawnEntry& e) {
             if (phalanx) { mg += mg / 2; eg += eg / 2; }
             eg += SUPPORTED_EG * popcount(support);
             score.add(mg, eg);
+            TRACE(T_CONNECTED + r, Us, phalanx ? 1.5 : 1.0);
+            TRACE(T_SUPPORTED, Us, popcount(support));
         }
 
         if (passed) {
             e.passed[Us] |= square_bb(s);
             score.add(PASSED_PAWN_MG[r], PASSED_PAWN_EG[r]);
+            TRACE(T_PASSED + r, Us, 1);
         }
     }
 
@@ -423,7 +478,10 @@ const PawnEntry* pawn_entry(const Position& pos) {
     key ^= key >> 32;
 
     PawnEntry& e = pawn_table[key & (PAWN_TABLE_SIZE - 1)];
+#ifndef EVAL_TRACE
+    // (The tuner recomputes every time, so the trace sees the pawn terms.)
     if (e.pawns[WHITE] == white && e.pawns[BLACK] == black) return &e;
+#endif
 
     e = PawnEntry{};
     e.pawns[WHITE] = white;
@@ -558,6 +616,7 @@ Score Evaluation::pieces() {
 
             const int moves = popcount(attacks & mobility_area[Us]) - MOBILITY_BASE[pt];
             score.add(moves * MOBILITY_MG[pt], moves * MOBILITY_EG[pt]);
+            TRACE(T_MOBILITY + pt, Us, moves);
 
             if (const U64 zone_hits = attacks & king_zone[Them]) {
                 ++king_attackers[Us];
@@ -565,20 +624,21 @@ Score Evaluation::pieces() {
             }
 
             if (pt == KNIGHT && is_outpost<Us>(s))
-                score.add(KNIGHT_OUTPOST_MG, KNIGHT_OUTPOST_EG);
+                { score.add(KNIGHT_OUTPOST_MG, KNIGHT_OUTPOST_EG); TRACE(T_KNIGHT_OUTPOST, Us, 1); }
             else if (pt == BISHOP && is_outpost<Us>(s))
-                score.add(BISHOP_OUTPOST_MG, BISHOP_OUTPOST_EG);
+                { score.add(BISHOP_OUTPOST_MG, BISHOP_OUTPOST_EG); TRACE(T_BISHOP_OUTPOST, Us, 1); }
 
             if (pt == ROOK) {
                 const U64 file = FILE_BB[file_of(s)];
                 if (!(file & own_pawns))
+                    TRACE((file & enemy_pawns) ? T_ROOK_SEMI_OPEN : T_ROOK_OPEN, Us, 1),
                     score.add((file & enemy_pawns) ? ROOK_SEMI_OPEN_MG : ROOK_OPEN_FILE_MG,
                               (file & enemy_pawns) ? ROOK_SEMI_OPEN_EG : ROOK_OPEN_FILE_EG);
 
                 if (relative_rank(Us, s) == 6
                     && (relative_rank(Us, pos.king_square(Them)) == 7
                         || (enemy_pawns & RANK_BB[rank_of(s)])))
-                    score.add(ROOK_ON_SEVENTH_MG, ROOK_ON_SEVENTH_EG);
+                    { score.add(ROOK_ON_SEVENTH_MG, ROOK_ON_SEVENTH_EG); TRACE(T_ROOK_SEVENTH, Us, 1); }
             }
         }
     }
@@ -586,7 +646,7 @@ Score Evaluation::pieces() {
     // Two bishops cover both square colours between them, which is worth more
     // than the sum of the pieces, and worth more still as the board empties.
     if (popcount(pos.pieces(Us, BISHOP)) >= 2)
-        score.add(BISHOP_PAIR_MG, BISHOP_PAIR_EG);
+        { score.add(BISHOP_PAIR_MG, BISHOP_PAIR_EG); TRACE(T_BISHOP_PAIR, Us, 1); }
 
     return score;
 }
@@ -614,9 +674,13 @@ int Evaluation::king_shelter() const {
                            && (own_pawns & square_bb(make_square(f, two_up)));
         if (!shield)
             mg += advanced ? SHIELD_PAWN_ADVANCED : SHIELD_PAWN_MISSING;
+        if (!shield)
+            TRACE(advanced ? T_SHIELD_ADVANCED : T_SHIELD_MISSING, Us, 1);
 
         if (!(own_pawns & FILE_BB[f]))
             mg += (enemy_pawns & FILE_BB[f]) ? KING_FILE_SEMI_OPEN : KING_FILE_OPEN;
+        if (!(own_pawns & FILE_BB[f]))
+            TRACE((enemy_pawns & FILE_BB[f]) ? T_KING_FILE_SEMI_OPEN : T_KING_FILE_OPEN, Us, 1);
     }
     return mg;
 }
@@ -668,6 +732,7 @@ Score Evaluation::threats() {
     while (threatened) {
         const PieceType victim = type_of(pos.piece_on(pop_lsb(threatened)));
         score.add(THREAT_BY_PAWN_MG[victim], THREAT_BY_PAWN_EG[victim]);
+        TRACE(T_THREAT_BY_PAWN + victim, Us, 1);
     }
 
     threatened = (attacked_by[Us][KNIGHT] | attacked_by[Us][BISHOP])
@@ -675,14 +740,16 @@ Score Evaluation::threats() {
     while (threatened) {
         const PieceType victim = type_of(pos.piece_on(pop_lsb(threatened)));
         score.add(THREAT_BY_MINOR_MG[victim], THREAT_BY_MINOR_EG[victim]);
+        TRACE(T_THREAT_BY_MINOR + victim, Us, 1);
     }
 
     if (attacked_by[Us][ROOK] & pos.pieces(Them, QUEEN))
-        score.add(THREAT_BY_ROOK_MG, THREAT_BY_ROOK_EG);
+        { score.add(THREAT_BY_ROOK_MG, THREAT_BY_ROOK_EG); TRACE(T_THREAT_BY_ROOK, Us, 1); }
 
     const int hanging = popcount(their_pieces & attacked_by[Us][ALL_PIECES]
                                  & ~attacked_by[Them][ALL_PIECES]);
     score.add(HANGING_MG * hanging, HANGING_EG * hanging);
+    TRACE(T_HANGING, Us, hanging);
 
     return score;
 }
@@ -720,20 +787,23 @@ Score Evaluation::passed_pawns() {
         if (const int weight = PASSED_KING_WEIGHT[r]) {
             eg += DISTANCE[their_king][stop] * weight;
             eg -= DISTANCE[our_king][stop] * weight * 2 / 3;
+            TRACE(T_PASSED_KING + r, Us, DISTANCE[their_king][stop] - DISTANCE[our_king][stop] * 2.0 / 3.0);
         }
 
         if (!(path & occupied)) {
             eg += PASSED_FREE_EG[r];
-            if (!(path & attacked_by[Them][ALL_PIECES])) eg += PASSED_SAFE_EG[r];
+            TRACE(T_PASSED_FREE + r, Us, 1);
+            if (!(path & attacked_by[Them][ALL_PIECES])) { eg += PASSED_SAFE_EG[r]; TRACE(T_PASSED_SAFE + r, Us, 1); }
         } else if (pos.pieces(Them) & square_bb(stop)) {
             eg += PASSED_BLOCKED_EG[r];
+            TRACE(T_PASSED_BLOCKED + r, Us, 1);
         }
 
         // Squares behind the pawn on its own file, as far as a rook standing
         // there could actually see.
         const U64 behind = FORWARD_FILE[Them][s] & rook_attacks(s, occupied);
-        if (behind & pos.pieces(Us, ROOK)) eg += ROOK_BEHIND_PASSER_EG;
-        else if (behind & pos.pieces(Them, ROOK)) eg -= ROOK_BEHIND_PASSER_EG;
+        if (behind & pos.pieces(Us, ROOK)) { eg += ROOK_BEHIND_PASSER_EG; TRACE(T_ROOK_BEHIND_PASSER, Us, 1); }
+        else if (behind & pos.pieces(Them, ROOK)) { eg -= ROOK_BEHIND_PASSER_EG; TRACE(T_ROOK_BEHIND_PASSER, Us, -1); }
 
         if (!non_pawn_material(Them) && !(path & occupied)) {
             const Square promotion = make_square(file_of(s), (Us == WHITE) ? 7 : 0);
@@ -742,7 +812,7 @@ Score Evaluation::passed_pawns() {
             // Moving first is worth a move of head start to the defender.
             const int king_steps = DISTANCE[their_king][promotion]
                                  - (pos.side_to_move() == Them ? 1 : 0);
-            if (king_steps > pawn_steps) eg += PASSED_UNSTOPPABLE_EG;
+            if (king_steps > pawn_steps) { eg += PASSED_UNSTOPPABLE_EG; TRACE(T_PASSED_UNSTOPPABLE, Us, 1); }
         }
 
         score.add(0, eg);
@@ -763,6 +833,8 @@ int Evaluation::material_and_psqt(Score& score) const {
         phase += PHASE_WEIGHT[type_of(pc)];
         if (color_of(pc) == WHITE) score.add(MG_PSQ[pc][s], EG_PSQ[pc][s]);
         else score.sub(MG_PSQ[pc][s], EG_PSQ[pc][s]);
+        TRACE(T_MATERIAL + type_of(pc), color_of(pc), 1);
+        TRACE(T_PSQT + type_of(pc) * 64 + (color_of(pc) == WHITE ? s ^ 56 : s), color_of(pc), 1);
     }
     return std::min(phase, MAX_PHASE);
 }
@@ -852,8 +924,12 @@ int Evaluation::value() {
 
     score.add(white.mg - black.mg, white.eg - black.eg);
 
-    const int eg = score.eg * scale_factor(score.eg) / SCALE_NORMAL;
+    const int scale = scale_factor(score.eg);
+    const int eg = score.eg * scale / SCALE_NORMAL;
     const int blended = (score.mg * phase + eg * (MAX_PHASE - phase)) / MAX_PHASE;
+#ifdef EVAL_TRACE
+    trace_totals = { score.mg, score.eg, phase, scale };
+#endif
 
     // Negamax wants the score from the mover's point of view, and having the
     // move is itself worth something.
@@ -952,5 +1028,197 @@ int fifty_move_scale(int score, const Position& pos) {
 int evaluate(const Position& pos) {
     return fifty_move_scale(evaluate_unscaled(pos), pos);
 }
+
+#ifdef EVAL_TRACE
+namespace Tune {
+
+namespace {
+
+const char* const PIECE_NAMES[PIECE_TYPE_NB] = { "PAWN", "KNIGHT", "BISHOP", "ROOK", "QUEEN", "KING" };
+
+// Fills `params` from the weights as they stand.  The order follows TraceIndex.
+void collect(std::vector<Param>& params) {
+    params.assign(T_COUNT, Param{});
+    auto set = [&](int index, const std::string& name, int mg, int eg, bool tune_mg = true, bool tune_eg = true) {
+        params[index] = Param{ name, mg, eg, tune_mg, tune_eg };
+    };
+    auto unused = [&](int index, const std::string& name) { set(index, name, 0, 0, false, false); };
+
+    for (int pt = PAWN; pt < PIECE_TYPE_NB; ++pt) {
+        if (pt == KING) unused(T_MATERIAL + pt, "MATERIAL_KING");
+        else set(T_MATERIAL + pt, std::string("MATERIAL_") + PIECE_NAMES[pt], MG_MATERIAL[pt], EG_MATERIAL[pt]);
+        for (int i = 0; i < 64; ++i) {
+            const bool pawn_edge = pt == PAWN && (i < 8 || i >= 56);   // pawns never stand on ranks 1 and 8
+            set(T_PSQT + pt * 64 + i, std::string(PIECE_NAMES[pt]) + "_" + std::to_string(i),
+                MG_TABLE[pt][i], EG_TABLE[pt][i], !pawn_edge, !pawn_edge);
+        }
+    }
+    set(T_BISHOP_PAIR, "BISHOP_PAIR", BISHOP_PAIR_MG, BISHOP_PAIR_EG);
+    set(T_DOUBLED, "DOUBLED_PAWN", DOUBLED_PAWN_MG, DOUBLED_PAWN_EG);
+    set(T_ISOLATED, "ISOLATED_PAWN", ISOLATED_PAWN_MG, ISOLATED_PAWN_EG);
+    set(T_BACKWARD, "BACKWARD_PAWN", BACKWARD_PAWN_MG, BACKWARD_PAWN_EG);
+    for (int r = 0; r < 8; ++r) {
+        const bool inner = r >= 1 && r <= 6;
+        set(T_CONNECTED + r, "CONNECTED_" + std::to_string(r), CONNECTED_MG[r], CONNECTED_EG[r], inner, inner);
+        set(T_PASSED + r, "PASSED_" + std::to_string(r), PASSED_PAWN_MG[r], PASSED_PAWN_EG[r], inner, inner);
+        set(T_PASSED_FREE + r, "PASSED_FREE_" + std::to_string(r), 0, PASSED_FREE_EG[r], false, inner);
+        set(T_PASSED_SAFE + r, "PASSED_SAFE_" + std::to_string(r), 0, PASSED_SAFE_EG[r], false, inner);
+        set(T_PASSED_BLOCKED + r, "PASSED_BLOCKED_" + std::to_string(r), 0, PASSED_BLOCKED_EG[r], false, inner);
+        set(T_PASSED_KING + r, "PASSED_KING_" + std::to_string(r), 0, PASSED_KING_WEIGHT[r], false, inner);
+    }
+    set(T_SUPPORTED, "SUPPORTED", 0, SUPPORTED_EG, false, true);
+    set(T_ROOK_BEHIND_PASSER, "ROOK_BEHIND_PASSER", 0, ROOK_BEHIND_PASSER_EG, false, true);
+    set(T_PASSED_UNSTOPPABLE, "PASSED_UNSTOPPABLE", 0, PASSED_UNSTOPPABLE_EG, false, true);
+    for (int pt = PAWN; pt < PIECE_TYPE_NB; ++pt) {
+        const bool piece = pt >= KNIGHT && pt <= QUEEN;
+        set(T_MOBILITY + pt, std::string("MOBILITY_") + PIECE_NAMES[pt], MOBILITY_MG[pt], MOBILITY_EG[pt], piece, piece);
+        set(T_THREAT_BY_PAWN + pt, std::string("THREAT_BY_PAWN_") + PIECE_NAMES[pt],
+            THREAT_BY_PAWN_MG[pt], THREAT_BY_PAWN_EG[pt], piece, piece);
+        const bool heavy = pt == ROOK || pt == QUEEN;
+        set(T_THREAT_BY_MINOR + pt, std::string("THREAT_BY_MINOR_") + PIECE_NAMES[pt],
+            THREAT_BY_MINOR_MG[pt], THREAT_BY_MINOR_EG[pt], heavy, heavy);
+    }
+    set(T_ROOK_OPEN, "ROOK_OPEN_FILE", ROOK_OPEN_FILE_MG, ROOK_OPEN_FILE_EG);
+    set(T_ROOK_SEMI_OPEN, "ROOK_SEMI_OPEN", ROOK_SEMI_OPEN_MG, ROOK_SEMI_OPEN_EG);
+    set(T_ROOK_SEVENTH, "ROOK_ON_SEVENTH", ROOK_ON_SEVENTH_MG, ROOK_ON_SEVENTH_EG);
+    set(T_KNIGHT_OUTPOST, "KNIGHT_OUTPOST", KNIGHT_OUTPOST_MG, KNIGHT_OUTPOST_EG);
+    set(T_BISHOP_OUTPOST, "BISHOP_OUTPOST", BISHOP_OUTPOST_MG, BISHOP_OUTPOST_EG);
+    set(T_THREAT_BY_ROOK, "THREAT_BY_ROOK", THREAT_BY_ROOK_MG, THREAT_BY_ROOK_EG);
+    set(T_HANGING, "HANGING", HANGING_MG, HANGING_EG);
+    set(T_SHIELD_ADVANCED, "SHIELD_PAWN_ADVANCED", SHIELD_PAWN_ADVANCED, 0, true, false);
+    set(T_SHIELD_MISSING, "SHIELD_PAWN_MISSING", SHIELD_PAWN_MISSING, 0, true, false);
+    set(T_KING_FILE_SEMI_OPEN, "KING_FILE_SEMI_OPEN", KING_FILE_SEMI_OPEN, 0, true, false);
+    set(T_KING_FILE_OPEN, "KING_FILE_OPEN", KING_FILE_OPEN, 0, true, false);
+}
+
+int round_int(double x) { return int(std::lround(x)); }
+
+std::string array_line(const std::string& decl, const std::vector<int>& values) {
+    std::string out = decl + " = { ";
+    for (size_t i = 0; i < values.size(); ++i) out += (i ? ", " : "") + std::to_string(values[i]);
+    return out + " };\n";
+}
+
+std::string board(const std::string& name, const std::vector<int>& values) {
+    std::string out = "const int " + name + "[64] = {\n";
+    for (int row = 0; row < 8; ++row) {
+        out += "    ";
+        for (int col = 0; col < 8; ++col) {
+            char cell[8];
+            std::snprintf(cell, sizeof cell, "%4d", values[row * 8 + col]);
+            out += cell;
+            if (row * 8 + col < 63) out += ",";
+        }
+        out += "\n";
+    }
+    return out + "};\n";
+}
+
+} // namespace
+
+std::vector<Param> parameters() {
+    std::vector<Param> params;
+    collect(params);
+    return params;
+}
+
+void trace(const Position& pos, Trace& out) {
+    std::fill(std::begin(trace_coefficients), std::end(trace_coefficients), 0.0);
+    const int stm_score = Evaluation(pos).value();
+    out.coefficients.clear();
+    for (int i = 0; i < T_COUNT; ++i)
+        if (trace_coefficients[i] != 0.0) out.coefficients.emplace_back(i, trace_coefficients[i]);
+    out.mg = trace_totals.mg;
+    out.eg = trace_totals.eg;
+    out.phase = trace_totals.phase;
+    out.scale = trace_totals.scale;
+    out.tempo = pos.side_to_move() == WHITE ? TEMPO : -TEMPO;
+    out.white_score = pos.side_to_move() == WHITE ? stm_score : -stm_score;
+}
+
+std::string source(const std::vector<double>& mg_in, const std::vector<double>& eg_in) {
+    std::vector<double> mg = mg_in, eg = eg_in;
+
+    // A constant added to every square of a piece's table is the same as adding
+    // it to the piece's material, so move each table's average into material
+    // and keep the tables centred on zero.
+    for (int pt = PAWN; pt <= QUEEN; ++pt) {
+        double sum_mg = 0, sum_eg = 0;
+        int count = 0;
+        for (int i = 0; i < 64; ++i) {
+            if (pt == PAWN && (i < 8 || i >= 56)) continue;
+            sum_mg += mg[T_PSQT + pt * 64 + i];
+            sum_eg += eg[T_PSQT + pt * 64 + i];
+            ++count;
+        }
+        const double avg_mg = sum_mg / count, avg_eg = sum_eg / count;
+        mg[T_MATERIAL + pt] += avg_mg;
+        eg[T_MATERIAL + pt] += avg_eg;
+        for (int i = 0; i < 64; ++i) {
+            if (pt == PAWN && (i < 8 || i >= 56)) continue;
+            mg[T_PSQT + pt * 64 + i] -= avg_mg;
+            eg[T_PSQT + pt * 64 + i] -= avg_eg;
+        }
+    }
+
+    auto vec = [&](const std::vector<double>& v, int start, int n) {
+        std::vector<int> out;
+        for (int i = 0; i < n; ++i) out.push_back(round_int(v[start + i]));
+        return out;
+    };
+    auto scalar = [&](const std::string& name, double v) {
+        return "constexpr int " + name + " = " + std::to_string(round_int(v)) + ";\n";
+    };
+
+    std::vector<int> mg_material = vec(mg, T_MATERIAL, PIECE_TYPE_NB), eg_material = vec(eg, T_MATERIAL, PIECE_TYPE_NB);
+    mg_material[KING] = eg_material[KING] = 0;
+    std::string out;
+    out += array_line("const int MG_MATERIAL[PIECE_TYPE_NB]", mg_material);
+    out += array_line("const int EG_MATERIAL[PIECE_TYPE_NB]", eg_material);
+    for (int pt = PAWN; pt < PIECE_TYPE_NB; ++pt) {
+        std::vector<int> m = vec(mg, T_PSQT + pt * 64, 64), e = vec(eg, T_PSQT + pt * 64, 64);
+        if (pt == PAWN)
+            for (int i = 0; i < 64; ++i)
+                if (i < 8 || i >= 56) m[i] = e[i] = 0;
+        out += board(std::string("MG_") + PIECE_NAMES[pt], m);
+        out += board(std::string("EG_") + PIECE_NAMES[pt], e);
+    }
+    out += scalar("BISHOP_PAIR_MG", mg[T_BISHOP_PAIR]) + scalar("BISHOP_PAIR_EG", eg[T_BISHOP_PAIR]);
+    out += scalar("DOUBLED_PAWN_MG", mg[T_DOUBLED]) + scalar("DOUBLED_PAWN_EG", eg[T_DOUBLED]);
+    out += scalar("ISOLATED_PAWN_MG", mg[T_ISOLATED]) + scalar("ISOLATED_PAWN_EG", eg[T_ISOLATED]);
+    out += scalar("BACKWARD_PAWN_MG", mg[T_BACKWARD]) + scalar("BACKWARD_PAWN_EG", eg[T_BACKWARD]);
+    out += array_line("const int CONNECTED_MG[8]", vec(mg, T_CONNECTED, 8));
+    out += array_line("const int CONNECTED_EG[8]", vec(eg, T_CONNECTED, 8));
+    out += scalar("SUPPORTED_EG", eg[T_SUPPORTED]);
+    out += array_line("const int PASSED_PAWN_MG[8]", vec(mg, T_PASSED, 8));
+    out += array_line("const int PASSED_PAWN_EG[8]", vec(eg, T_PASSED, 8));
+    out += array_line("const int PASSED_FREE_EG[8]", vec(eg, T_PASSED_FREE, 8));
+    out += array_line("const int PASSED_SAFE_EG[8]", vec(eg, T_PASSED_SAFE, 8));
+    out += array_line("const int PASSED_BLOCKED_EG[8]", vec(eg, T_PASSED_BLOCKED, 8));
+    out += array_line("const int PASSED_KING_WEIGHT[8]", vec(eg, T_PASSED_KING, 8));
+    out += scalar("ROOK_BEHIND_PASSER_EG", eg[T_ROOK_BEHIND_PASSER]);
+    out += scalar("PASSED_UNSTOPPABLE_EG", eg[T_PASSED_UNSTOPPABLE]);
+    out += array_line("const int MOBILITY_MG[PIECE_TYPE_NB]", vec(mg, T_MOBILITY, PIECE_TYPE_NB));
+    out += array_line("const int MOBILITY_EG[PIECE_TYPE_NB]", vec(eg, T_MOBILITY, PIECE_TYPE_NB));
+    out += scalar("ROOK_OPEN_FILE_MG", mg[T_ROOK_OPEN]) + scalar("ROOK_OPEN_FILE_EG", eg[T_ROOK_OPEN]);
+    out += scalar("ROOK_SEMI_OPEN_MG", mg[T_ROOK_SEMI_OPEN]) + scalar("ROOK_SEMI_OPEN_EG", eg[T_ROOK_SEMI_OPEN]);
+    out += scalar("ROOK_ON_SEVENTH_MG", mg[T_ROOK_SEVENTH]) + scalar("ROOK_ON_SEVENTH_EG", eg[T_ROOK_SEVENTH]);
+    out += scalar("KNIGHT_OUTPOST_MG", mg[T_KNIGHT_OUTPOST]) + scalar("KNIGHT_OUTPOST_EG", eg[T_KNIGHT_OUTPOST]);
+    out += scalar("BISHOP_OUTPOST_MG", mg[T_BISHOP_OUTPOST]) + scalar("BISHOP_OUTPOST_EG", eg[T_BISHOP_OUTPOST]);
+    out += array_line("const int THREAT_BY_PAWN_MG[PIECE_TYPE_NB]", vec(mg, T_THREAT_BY_PAWN, PIECE_TYPE_NB));
+    out += array_line("const int THREAT_BY_PAWN_EG[PIECE_TYPE_NB]", vec(eg, T_THREAT_BY_PAWN, PIECE_TYPE_NB));
+    out += array_line("const int THREAT_BY_MINOR_MG[PIECE_TYPE_NB]", vec(mg, T_THREAT_BY_MINOR, PIECE_TYPE_NB));
+    out += array_line("const int THREAT_BY_MINOR_EG[PIECE_TYPE_NB]", vec(eg, T_THREAT_BY_MINOR, PIECE_TYPE_NB));
+    out += scalar("THREAT_BY_ROOK_MG", mg[T_THREAT_BY_ROOK]) + scalar("THREAT_BY_ROOK_EG", eg[T_THREAT_BY_ROOK]);
+    out += scalar("HANGING_MG", mg[T_HANGING]) + scalar("HANGING_EG", eg[T_HANGING]);
+    out += scalar("SHIELD_PAWN_ADVANCED", mg[T_SHIELD_ADVANCED]);
+    out += scalar("SHIELD_PAWN_MISSING", mg[T_SHIELD_MISSING]);
+    out += scalar("KING_FILE_SEMI_OPEN", mg[T_KING_FILE_SEMI_OPEN]);
+    out += scalar("KING_FILE_OPEN", mg[T_KING_FILE_OPEN]);
+    return out;
+}
+
+} // namespace Tune
+#endif
 
 } // namespace Eval

@@ -36,3 +36,42 @@ int fifty_move_scale(int score, const Position& pos);
 extern const int PIECE_VALUE[PIECE_TYPE_NB];
 
 } // namespace Eval
+
+#ifdef EVAL_TRACE
+#include <string>
+#include <utility>
+#include <vector>
+
+// Only in the `tuner` build (make tuner): what Texel tuning needs to see inside
+// the evaluation.  See tune.cpp.
+namespace Eval::Tune {
+
+// One tunable weight: a middlegame and an endgame value.  Some weights only
+// exist in one phase (king shelter is middlegame-only, most passed-pawn terms
+// endgame-only); the other half is left alone.
+struct Param {
+    std::string name;
+    int mg = 0, eg = 0;
+    bool tune_mg = true, tune_eg = true;
+};
+
+// Every tunable weight with its current value, indexed like the trace.
+std::vector<Param> parameters();
+
+// One position as the evaluation saw it.
+struct Trace {
+    std::vector<std::pair<int, double>> coefficients;  // weight index, White-minus-Black count
+    int mg = 0, eg = 0;     // the middlegame and endgame totals before blending (White's view)
+    int phase = 0;          // 24 with every piece on, 0 with none
+    int scale = 64;         // endgame scale factor, out of 64
+    int tempo = 0;          // the tempo bonus, from White's point of view
+    int white_score = 0;    // the finished evaluation, from White's point of view
+};
+void trace(const Position& pos, Trace& out);
+
+// C++ definitions of every weight with the given values, in the same form as
+// eval.cpp, for pasting back (piece-square averages are moved into material).
+std::string source(const std::vector<double>& mg, const std::vector<double>& eg);
+
+} // namespace Eval::Tune
+#endif
