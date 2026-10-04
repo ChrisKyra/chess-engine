@@ -870,6 +870,7 @@ public partial class MainWindow : Window
             GameEndReason.Timeout => "on time",
             GameEndReason.TimeoutVsInsufficientMaterial => "time, no mating material",
             GameEndReason.IllegalMove => "illegal move",
+            GameEndReason.Adjudication => "adjudicated",
             _ => "",
         };
         var winner = game.Engine1Points switch

@@ -13,6 +13,9 @@ public sealed class GameEndTally
     private long decisivePlies;
     private long drawnPlies;
 
+    // Adjudication ends games either way; this counts the ones that were decided.
+    private int adjudicatedWins;
+
     public int Games => Decisive + Draws;
 
     public int Decisive { get; private set; }
@@ -25,6 +28,8 @@ public sealed class GameEndTally
         if (!result.IsOver)
             return;
         counts[result.Reason] = Count(result.Reason) + 1;
+        if (result.Reason == GameEndReason.Adjudication && result.Outcome != GameOutcome.Draw)
+            adjudicatedWins++;
         if (result.Outcome == GameOutcome.Draw)
         {
             Draws++;
@@ -58,12 +63,16 @@ public sealed class GameEndTally
         var rows = new List<(string, int, bool)> { ("Decisive", Decisive, true), ("Checkmate", Count(GameEndReason.Checkmate), false) };
         AddIfAny(GameEndReason.Timeout, "Lost on time");
         AddIfAny(GameEndReason.IllegalMove, "Illegal move");
+        if (adjudicatedWins > 0)
+            rows.Add(("Adjudicated", adjudicatedWins, false));
         rows.Add(("Drawn", Draws, true));
         rows.Add(("Repetition", Count(GameEndReason.ThreefoldRepetition), false));
         rows.Add(("Fifty-move rule", Count(GameEndReason.FiftyMoveRule), false));
         AddIfAny(GameEndReason.Stalemate, "Stalemate");
         AddIfAny(GameEndReason.InsufficientMaterial, "Insufficient material");
         AddIfAny(GameEndReason.TimeoutVsInsufficientMaterial, "Time out, no mating material");
+        if (Count(GameEndReason.Adjudication) - adjudicatedWins > 0)
+            rows.Add(("Adjudicated", Count(GameEndReason.Adjudication) - adjudicatedWins, false));
         return rows;
 
         void AddIfAny(GameEndReason reason, string label)
@@ -86,6 +95,8 @@ public sealed class GameEndTally
         var wins = new List<string> { $"{Count(GameEndReason.Checkmate)} checkmate" };
         AddIfAny(wins, GameEndReason.Timeout, "on time");
         AddIfAny(wins, GameEndReason.IllegalMove, "illegal move");
+        if (adjudicatedWins > 0)
+            wins.Add($"{adjudicatedWins} adjudicated");
 
         var draws = new List<string>
         {
@@ -95,6 +106,8 @@ public sealed class GameEndTally
         AddIfAny(draws, GameEndReason.Stalemate, "stalemate");
         AddIfAny(draws, GameEndReason.InsufficientMaterial, "insufficient material");
         AddIfAny(draws, GameEndReason.TimeoutVsInsufficientMaterial, "time, no mating material");
+        if (Count(GameEndReason.Adjudication) - adjudicatedWins > 0)
+            draws.Add($"{Count(GameEndReason.Adjudication) - adjudicatedWins} adjudicated");
 
         string Moves(double? value) => value is { } v ? v.ToString("0", inv) : "—";
         return $"Decisive {Decisive}: {string.Join(" · ", wins)}\n" +

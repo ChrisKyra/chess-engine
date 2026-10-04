@@ -22,6 +22,9 @@ public enum GameEndReason
     Timeout,
     TimeoutVsInsufficientMaterial,
     IllegalMove,
+
+    /// <summary>Ended early by agreement of both engines' scores (a decided or a dead level position).</summary>
+    Adjudication,
 }
 
 public readonly record struct GameResult(GameOutcome Outcome, GameEndReason Reason)
@@ -56,6 +59,7 @@ public readonly record struct GameResult(GameOutcome Outcome, GameEndReason Reas
             GameEndReason.ThreefoldRepetition => "Draw by threefold repetition",
             GameEndReason.TimeoutVsInsufficientMaterial => "Draw — time ran out, but the opponent cannot mate",
             GameEndReason.IllegalMove => $"{winner} wins — the opponent played an illegal move",
+            GameEndReason.Adjudication => Outcome == GameOutcome.Draw ? "Draw by adjudication" : $"{winner} wins by adjudication",
             _ => "",
         };
     }
@@ -194,6 +198,8 @@ public sealed class Game
             Tag("Termination", "time forfeit");
         else if (result.Reason == GameEndReason.IllegalMove)
             Tag("Termination", "rules infraction");
+        else if (result.Reason == GameEndReason.Adjudication)
+            Tag("Termination", "adjudication");
         sb.Append('\n');
 
         var tokens = new List<string>();
