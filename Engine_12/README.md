@@ -8,13 +8,60 @@ search with move ordering.
 Move generation is verified against the standard perft suite. It speaks UCI, so
 it plugs into any chess GUI.
 
-## Engine 11 (`Engine_11`)
+## Engine 12 (`Engine_12`)
+
+UCI name "Bitboard Engine 12". Based on `../Engine_11`. Search and the tuned
+evaluation are unchanged; the engine now knows a number of endings outright
+instead of evaluating them term by term.
+
+1. **King and pawn against king, solved exactly** (`bitbase.cpp`). At start-up
+   every KPK position -- 196,608 once the pawn is mirrored onto files a to d -- is
+   classified by retrograde analysis: positions decided on the spot (a pawn that
+   queens safely, stalemate, the pawn taken) first, then repeatedly every position
+   whose moves all lead to known results, until nothing changes. It takes a few
+   milliseconds and is stored as one bit per position. The evaluation scores a won
+   KPK position as a known win and a drawn one as 0, so the engine never pushes a
+   pawn into a draw or gives up a win.
+2. **Mating material against a lone king.** With a queen, a rook, two bishops on
+   different colours, or bishop and knight, the position is scored as a known win
+   (10,000 plus material) and the score rises as the lone king is driven to the
+   edge and the strong king comes close -- the shape of every mating pattern. Bishop
+   and knight can only mate in a corner of the bishop's colour, so there the lone
+   king is pulled steeply towards that corner, one step at a time along the edge.
+3. **Known draws against a lone king.** Rook pawns with the defending king in
+   front of them, and bishop and rook pawns where the bishop does not control the
+   queening square and the defending king reaches it ("wrong bishop"), score 0.
+4. **Stalemate.** A lone king with no move and not in check is stalemated; the
+   evaluation checks for it in these endings, because quiescence search does not.
+5. **Blocking king.** Rook and pawn against rook, and bishop and pawn against
+   bishop with the defending king on a square the bishop cannot reach, are scaled
+   right down when the defending king stands in the pawn's path.
+
+The recognised endings are left out of the tuner build, which keeps tuning the
+ordinary terms.
+
+**Checks.** Textbook positions come out right (KPK wins and draws, including
+Ke5 Pe6 v Ke8 with Black to move, which is a draw after ...Ke7; the wrong bishop;
+rook pawns). Play-outs from scratch, the engine playing both sides at 1 s a move:
+queen against king mates 3 of 3 in 7-8 moves, rook against king 5 of 5 in 10-22,
+bishop and knight against king 5 of 6 in 28-41 (Engine 11: 4 of 6). Getting bishop
+and knight to work took two fixes found by the play-outs: the stalemate check, and
+a corner pull steep enough (320 per step) that the lone king is not left in the
+centre. **Benchmark** 285,237 nodes; perft is identical.
+
+**Testing.** Against Engine 11, 300 games at 8 s + 0.08 s (one thread, eight
+games at a time, adjudication on): 50.8%, +6 ± 25 Elo -- no measurable change in
+ordinary games, as expected: these endings are rare in 300 games, and many games
+are adjudicated before they are reached. What the knowledge buys shows in the
+endings themselves (the checks and play-outs above).
+
+## Earlier: Engine 11 (`Engine_11`)
 
 UCI name "Bitboard Engine 11". Based on `../Engine_10`. The search is untouched;
 the evaluation's weights are no longer hand-picked but fitted to game results
 (Texel tuning), and it has new terms. Together: about +160 Elo over Engine 10
 (+121 for the tuning, +42 more for the new terms and a second tuning round).
-Endgame knowledge is planned for Engine 12.
+Endgame knowledge followed in Engine 12.
 
 ### 1. Texel tuning
 
@@ -592,7 +639,8 @@ the `engine` binary as a UCI engine.
 | `bitboard.h/.cpp` | Bitboard operations, attack tables, magic bitboard generation |
 | `position.h/.cpp` | Board state, FEN, Zobrist hashing, make/unmake, attack queries |
 | `movegen.h/.cpp` | Pseudo-legal and legal move generation |
-| `eval.h/.cpp` | Tapered evaluation, with the tuning trace (`EVAL_TRACE` builds only) |
+| `bitbase.h/.cpp` | King and pawn against king, solved at start-up |
+| `eval.h/.cpp` | Tapered evaluation and known endings, with the tuning trace (`EVAL_TRACE` builds only) |
 | `tune.cpp` | The Texel tuner and `explain` (in the `tuner` binary only) |
 | `apply_tuned.py` | Writes the tuner's output into `eval.cpp` |
 | `search.h/.cpp` | Alpha-beta, transposition table, quiescence, time management |
@@ -855,8 +903,10 @@ carries the same explanations as comments.
 | `Evaluation::material_and_psqt(score)` | Material and piece-square values for every piece in one sweep, White positive and Black negative, returning the game phase counted in the same pass. |
 | `Evaluation::non_pawn_material(c)` | Middlegame value of everything but pawns and the king: the material that can force a win. |
 | `Evaluation::opposite_bishops()` | Whether each side has exactly one bishop and the two travel on different-coloured squares. |
-| `Evaluation::scale_factor(eg)` | How much of the endgame score to believe: reduced for opposite-coloured bishops, for a winning side with no pawns and less than a rook's edge, and for knights without pawns, which cannot mate at all. |
-| `Evaluation::value()` | Runs every term in dependency order, scales the endgame score, blends the two phases by the game phase, and returns the result from the mover's point of view plus the tempo bonus. In the tuner build it also keeps the totals before blending for the trace. |
+| `Evaluation::scale_factor(eg)` | How much of the endgame score to believe: reduced for opposite-coloured bishops, for a winning side with no pawns and less than a rook's edge, and for knights without pawns, which cannot mate at all, and for rook-and-pawn or bishop-and-pawn against the same piece with the defending king blocking the pawn. |
+| `Evaluation::known_ending(white_score)` | Recognises a lone king against KPK (exact table), rook pawns or the wrong bishop with the king in front (draws), bishop and knight (driven to the right corner) or other mating material (driven to the edge), and stalemate; returns false for everything else. |
+| `push_to_edge(s)` / `push_close(d)` / `steps(a, b)` | The shapes the mating scores are built from: how near a square is to the edge, how close the kings are, and the step distance used for the bishop-and-knight corner. |
+| `Evaluation::value()` | Recognised endings first (not in the tuner build), then runs every term in dependency order, scales the endgame score, blends the two phases by the game phase, and returns the result from the mover's point of view plus the tempo bonus. In the tuner build it also keeps the totals before blending for the trace. |
 | `TRACE(index, colour, count)` | Records that a weight was used `count` times for a colour. Empty in the engine; in the tuner build (`EVAL_TRACE`) it fills the trace. |
 | `Eval::Tune::parameters()` | Tuner build: every tunable weight with its name, current middlegame and endgame value, and which halves may be tuned. |
 | `Eval::Tune::trace(pos, out)` | Tuner build: evaluates one position and returns every weight's White-minus-Black count, the totals before blending, the phase, the scale factor and the tempo. |
@@ -918,6 +968,16 @@ carries the same explanations as comments.
 | `allocate_tt(mb)` | Sizes the table to the largest power-of-two bucket count that fits. |
 | `Searcher::elapsed()` / `time_used()` | Milliseconds since the search began, and since the clock for the limits started — the two differ after `ponderhit`. |
 
+### `bitbase.h` / `bitbase.cpp` — king and pawn against king
+
+| Function | What it does |
+|---|---|
+| `Bitbase::init()` | Classifies every KPK position by retrograde analysis and stores one bit per position (set: the side with the pawn wins). Called from `Eval::init()`. |
+| `Bitbase::kpk_win(strong, king, pawn, weak_king, stm)` | Whether the side with the pawn wins: mirrors the position so that side is White and the pawn on files a to d, and reads the bit. |
+| `index(stm, black_king, white_king, pawn)` | Packs a position into 18 bits: both kings, the side to move, the pawn's file (a-d) and rank. |
+| `Entry::Entry(idx)` | The result that can be read off a position directly: impossible, a safe promotion (win), stalemate or the pawn taken (draw), or unknown. |
+| `Entry::classify(db)` | One step of the analysis: White wins if any move wins; Black draws if any move draws; otherwise the other result once every move is known. |
+
 ### `perft.h` / `perft.cpp` — proving the move generator
 
 | Function | What it does |
@@ -967,8 +1027,8 @@ carries the same explanations as comments.
 
 Roughly in order of Elo gained per hour of work:
 
-1. **Endgame knowledge** (Engine 12) — king and pawn against king solved exactly, the bishop-and-knight mate, the wrong-coloured bishop with a rook pawn,
-   and better scaling of drawish material balances.
+1. **More endgame knowledge** — more exact tables (KRK, KQKR, KPKP) or Syzygy
+   tablebases, and more drawing patterns.
 2. **More search** — SPSA tuning of the search parameters (margins, depths, time
    scales), correction history, history-based pruning of quiet moves, using the
    table score as a better static evaluation, razoring, and another try at

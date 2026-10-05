@@ -1,4 +1,5 @@
 #include "eval.h"
+#include "bitbase.h"
 #include "movegen.h"
 
 #include <algorithm>
@@ -322,6 +323,39 @@ constexpr int SCALE_OPPOSITE_BISHOPS = 22;      // bishops of opposite colours, 
 constexpr int SCALE_OPPOSITE_BISHOPS_PIECES = 44;
 constexpr int SCALE_NO_PAWNS_TINY_EDGE = 8;     // no pawns, less than a bishop ahead
 constexpr int SCALE_NO_PAWNS_SMALL_EDGE = 24;   // no pawns, less than a rook ahead
+constexpr int SCALE_BLOCKED_ROOK_PAWN = 16;     // rook and pawn against rook, defending king in front
+constexpr int SCALE_BLOCKED_BISHOP_PAWN = 4;    // bishop and pawn against bishop, king blocking on the other colour
+
+// ---------------------------------------------------------------------------
+// Endgame knowledge.  A few endings are not evaluated term by term but
+// recognised: their result is known.
+// ---------------------------------------------------------------------------
+
+// A score for a position that is won with correct play but not yet a mate the
+// search can see: far above any material count, far below the mate scores.
+constexpr int KNOWN_WIN = 10000;
+
+// Driving a lone king to the edge: 20 in the centre, rising steeply towards the
+// edges, 100 in a corner ...
+int push_to_edge(Square s) {
+    const int f = std::min(file_of(s), 7 - file_of(s));   // 0 on the edge, 3 in the centre
+    const int r = std::min(rank_of(s), 7 - rank_of(s));
+    const int centre = std::min(f, r) * 2 + std::max(f, r);   // 0 in a corner, 9 in the centre
+    return 100 - centre * 80 / 9;
+}
+
+// ... and bringing our own king close, which is what the mating patterns need:
+// worth most with one square between the kings.
+int push_close(int distance) {
+    constexpr int CLOSE[8] = { 0, 0, 100, 80, 60, 40, 20, 10 };
+    return CLOSE[distance];
+}
+
+// The step (file plus rank) distance between two squares: unlike the king
+// distance, it falls with every step along an edge towards a corner.
+int steps(Square a, Square b) {
+    return std::abs(file_of(a) - file_of(b)) + std::abs(rank_of(a) - rank_of(b));
+}
 
 // ---------------------------------------------------------------------------
 // A middlegame and an endgame score accumulated in parallel.
@@ -562,6 +596,7 @@ private:
     template<Color Us> bool is_outpost(Square s) const;
 
     int material_and_psqt(Score& score) const;
+    bool known_ending(int& white_score) const;
     int non_pawn_material(Color c) const;
     bool opposite_bishops() const;
     int scale_factor(int eg) const;
@@ -974,7 +1009,129 @@ int Evaluation::scale_factor(int eg) const {
         else if (edge <= MG_MATERIAL[ROOK]) scale = std::min(scale, SCALE_NO_PAWNS_SMALL_EDGE);
     }
 
+    // One pawn against nothing but a matching piece, with the defending king
+    // standing in the pawn's path: the classic drawing setups.
+    if (strong_pawns == 1 && !pos.pieces(~strong, PAWN)) {
+        const Square pawn = lsb(pos.pieces(strong, PAWN));
+        const Square weak_king = pos.king_square(~strong);
+        const bool king_in_path = file_of(weak_king) == file_of(pawn)
+                               && relative_rank(strong, weak_king) > relative_rank(strong, pawn);
+        auto only = [&](Color c, PieceType pt) {
+            return popcount(pos.pieces(c, pt)) == 1
+                && popcount(pos.pieces(c) & ~pos.pieces(c, PAWN) & ~pos.pieces(c, KING)) == 1;
+        };
+
+        // Rook and pawn against rook: with the king in front, the defence holds
+        // (Philidor) far more often than not.
+        if (king_in_path && only(strong, ROOK) && only(~strong, ROOK))
+            scale = std::min(scale, SCALE_BLOCKED_ROOK_PAWN);
+
+        // Bishop and pawn against bishop: a king in front on a square the strong
+        // side's bishop cannot reach can never be driven away.
+        if (king_in_path && only(strong, BISHOP) && only(~strong, BISHOP)
+            && bool(pos.pieces(strong, BISHOP) & DARK_SQUARES) != bool(square_bb(weak_king) & DARK_SQUARES))
+            scale = std::min(scale, SCALE_BLOCKED_BISHOP_PAWN);
+    }
+
     return scale;
+}
+
+// Endings whose result is known, scored directly from White's point of view.
+// All of them are a lone king against something:
+//
+//  * king and pawn against king -- looked up in the exact table (bitbase.cpp);
+//  * rook pawns only, with the defending king in front of them -- a draw;
+//  * bishop and rook pawns, where the bishop does not control the queening
+//    square and the defending king reaches it -- a draw ("wrong bishop");
+//  * bishop and knight -- a win, but only in a corner of the bishop's colour,
+//    so the lone king is driven there;
+//  * anything else that can force mate (a queen, a rook, bishop and knight, two
+//    bishops on different colours) -- a win, driving the lone king to the edge
+//    and bringing our own king up, which is how the mate is found.
+//
+// Returns false for everything else, which is evaluated normally.
+bool Evaluation::known_ending(int& white_score) const {
+    for (Color strong : { WHITE, BLACK }) {
+        const Color weak = ~strong;
+        if (pos.pieces(weak) != pos.pieces(weak, KING)) continue;   // the weak side has more than a king
+
+        const int pawns = popcount(pos.pieces(strong, PAWN));
+        const int knights = popcount(pos.pieces(strong, KNIGHT));
+        const int bishops = popcount(pos.pieces(strong, BISHOP));
+        const int rooks = popcount(pos.pieces(strong, ROOK));
+        const int queens = popcount(pos.pieces(strong, QUEEN));
+        const Square strong_king = pos.king_square(strong);
+        const Square weak_king = pos.king_square(weak);
+        const int sign = (strong == WHITE) ? 1 : -1;
+
+        // A lone king with no move and not in check is stalemated.  Quiescence
+        // search does not look for stalemate, so without this a won ending could
+        // be thrown away on the last move of a line.
+        if (pos.side_to_move() == weak && !pos.in_check()) {
+            MoveList moves;
+            generate_legal(pos, moves);
+            if (moves.empty()) { white_score = 0; return true; }
+        }
+
+        // Every pawn on one rook file, and which one.
+        const U64 pawn_set = pos.pieces(strong, PAWN);
+        const bool rook_file_pawns = pawns > 0 && (!(pawn_set & ~FILE_A_BB) || !(pawn_set & ~FILE_H_BB));
+        const Square queening = rook_file_pawns
+            ? make_square(file_of(lsb(pawn_set)), strong == WHITE ? 7 : 0) : SQ_A1;   // (unused without rook-file pawns)
+
+        if (pawns == 1 && knights + bishops + rooks + queens == 0) {
+            const Square pawn = lsb(pawn_set);
+            const bool win = Bitbase::kpk_win(strong, strong_king, pawn, weak_king, pos.side_to_move());
+            white_score = win ? sign * (KNOWN_WIN + EG_MATERIAL[PAWN] + 10 * relative_rank(strong, pawn)) : 0;
+            return true;
+        }
+
+        if (rook_file_pawns && knights + bishops + rooks + queens == 0) {
+            const U64 front = (strong == WHITE) ? square_bb(msb(pawn_set)) : square_bb(lsb(pawn_set));
+            if (DISTANCE[weak_king][queening] <= 1
+                && relative_rank(strong, weak_king) > relative_rank(strong, lsb(front))) {
+                white_score = 0;
+                return true;
+            }
+            return false;
+        }
+
+        if (rook_file_pawns && bishops == 1 && knights + rooks + queens == 0) {
+            const bool bishop_dark = pos.pieces(strong, BISHOP) & DARK_SQUARES;
+            const bool corner_dark = square_bb(queening) & DARK_SQUARES;
+            if (bishop_dark != corner_dark && DISTANCE[weak_king][queening] <= 1) {
+                white_score = 0;
+                return true;
+            }
+            return false;
+        }
+
+        if (pawns == 0 && knights == 1 && bishops == 1 && rooks + queens == 0) {
+            const bool dark = pos.pieces(strong, BISHOP) & DARK_SQUARES;
+            const Square a = dark ? SQ_A1 : SQ_A8, b = dark ? SQ_H8 : SQ_H1;
+            // Mate is only possible in a corner of the bishop's colour: pull the
+            // lone king towards the nearer of the two, step by step along the edge.
+            const int corner = std::min(steps(weak_king, a), steps(weak_king, b));
+            // The pull has to be steep -- each step towards the right corner worth
+            // more than any king manoeuvre -- or the lone king is left in the centre.
+            white_score = sign * (KNOWN_WIN + push_close(DISTANCE[strong_king][weak_king])
+                                  + 320 * (14 - corner) + push_to_edge(weak_king));
+            return true;
+        }
+
+        const bool both_bishop_colours = (pos.pieces(strong, BISHOP) & DARK_SQUARES)
+                                      && (pos.pieces(strong, BISHOP) & ~DARK_SQUARES);
+        if (queens || rooks || (bishops && knights) || both_bishop_colours) {
+            int material = 0;
+            for (PieceType pt : { PAWN, KNIGHT, BISHOP, ROOK, QUEEN })
+                material += EG_MATERIAL[pt] * popcount(pos.pieces(strong, pt));
+            white_score = sign * (KNOWN_WIN + material + push_to_edge(weak_king)
+                                  + push_close(DISTANCE[strong_king][weak_king]));
+            return true;
+        }
+        return false;
+    }
+    return false;
 }
 
 // Runs every term in the order they depend on each other, scales the endgame
@@ -986,6 +1143,13 @@ int Evaluation::scale_factor(int eg) const {
 // a proportional mix.  One number cannot say both "the king wants shelter" and
 // "the king wants the centre", so two are kept until the last moment.
 int Evaluation::value() {
+#ifndef EVAL_TRACE
+    // Endings whose result is known are scored by what they are worth, not by
+    // the terms below.  (The tuner leaves them out: they have no weights.)
+    if (int white_score = 0; known_ending(white_score))
+        return pos.side_to_move() == WHITE ? white_score : -white_score;
+#endif
+
     Score score;
     const int phase = material_and_psqt(score);
 
@@ -1030,6 +1194,8 @@ int Evaluation::value() {
 // and the square-distance table.  Everything here depends only on the board
 // geometry, so it is computed once and never changes.
 void init() {
+    Bitbase::init();
+
     for (int c = WHITE; c <= BLACK; ++c) {
         for (int pt = PAWN; pt < PIECE_TYPE_NB; ++pt) {
             Piece pc = make_piece(Color(c), PieceType(pt));

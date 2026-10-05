@@ -7,7 +7,7 @@ LDFLAGS  ?= -flto -pthread
 # machine. Drop it if you need a binary that runs on other CPUs.
 NATIVE   ?= -march=native
 
-SRC = bitboard.cpp position.cpp movegen.cpp eval.cpp search.cpp perft.cpp uci.cpp
+SRC = bitboard.cpp bitbase.cpp position.cpp movegen.cpp eval.cpp search.cpp perft.cpp uci.cpp
 OBJ = $(SRC:.cpp=.o)
 BIN = engine
 

@@ -16,7 +16,7 @@
 
 namespace {
 
-const char* ENGINE_NAME = "Bitboard Engine 11";
+const char* ENGINE_NAME = "Bitboard Engine 12";
 const char* ENGINE_AUTHOR = "built from scratch in C++";
 
 // How long a plain "go" (no limits at all) thinks, in milliseconds.  The GUI

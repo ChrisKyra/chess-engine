@@ -2,7 +2,7 @@
 
 A desktop app for playing against your own chess engine. It talks to engines
 over **UCI**, the standard text protocol on stdin/stdout, so any engine that
-speaks UCI plugs in: the C++ engine in `../Engine_11`, one you write later, or
+speaks UCI plugs in: the C++ engine in `../Engine_12`, one you write later, or
 Stockfish for comparison.
 
 Runs on macOS, Windows and Linux (.NET 10 + Avalonia 11).
@@ -33,7 +33,7 @@ copy to the front.
 ./build-mac-app.sh /Applications  # or put it somewhere else
 ```
 
-This builds the engine (`../Engine_11`; change `ENGINE_DIR` in the
+This builds the engine (`../Engine_12`; change `ENGINE_DIR` in the
 script to bundle another version), publishes the GUI self-contained (no .NET needed to run
 it), and bundles the engine inside the app, which loads it automatically when
 you haven't chosen another engine. Rerun the script after changing the GUI or
@@ -43,7 +43,7 @@ the engine to refresh the app.
 
 The GUI runs up to two engines at once, **Engine 1** and **Engine 2**.
 
-1. Build the engine (for example `make -C ../Engine_11`).
+1. Build the engine (for example `make -C ../Engine_12`).
 2. On the **Engines** tab, click **Load…** under Engine 1 or Engine 2 and pick
    the engine executable. For a script-based engine, choose the interpreter
    (for example `/usr/bin/python3`) and put the script path in
@@ -58,7 +58,7 @@ The GUI runs up to two engines at once, **Engine 1** and **Engine 2**.
    Pressing Start after Quit begins a fresh game from the same starting position.
 
 Outside matches the GUI doesn't set how long engines think: it sends a plain `go`
-and each engine decides for itself (Engines 9 to 11 think for up to 500 ms per move on a
+and each engine decides for itself (Engines 9 to 12 think for up to 500 ms per move on a
 plain `go`). Matches have their own time control (see below). Engines can't be loaded, reloaded or unloaded
 while a game or match is in progress, so an engine can't change mid-game.
 

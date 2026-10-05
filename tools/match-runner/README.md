@@ -7,7 +7,7 @@ versions are tested with, and it also generates the positions the evaluation is
 tuned on.
 
     cd tools/match-runner
-    dotnet run -c Release -- --engine1 /path/to/new/engine --engine2 ../../Engine_11/engine \
+    dotnet run -c Release -- --engine1 /path/to/new/engine --engine2 ../../Engine_12/engine \
         --tc 8+0.08 --concurrency 8 --sprt 0,10 --games 300 --option Threads=1 --option Hash=64
 
 (If `dotnet` was installed into `~/.dotnet`, put it on the `PATH` and set
@@ -28,16 +28,16 @@ saves time without changing results in any meaningful way.
 
 ## Data for tuning
 
-    dotnet run -c Release -- --engine1 ../../Engine_11/engine --engine2 ../../Engine_11/engine \
+    dotnet run -c Release -- --engine1 ../../Engine_12/engine --engine2 ../../Engine_12/engine \
         --nodes 10000 --random-plies 4 --games 20000 --concurrency 8 --option Threads=1 \
         --datagen positions.txt
 
 writes one line per quiet position, `FEN;result` with the result from White's point
 of view (`1.0`, `0.5`, `0.0`). A position is recorded when it is at least
 `--skip-plies` (default 8) plies past the opening, the side to move is not in check,
-and the engine's move is not a capture or promotion. `Engine_11`'s tuner
+and the engine's move is not a capture or promotion. `Engine_12`'s tuner
 (`make tuner && ./tuner tune positions.txt`) then fits the evaluation to those
-results; see `Engine_11/README.md`.
+results; see `Engine_12/README.md`.
 
 ## Options
 
