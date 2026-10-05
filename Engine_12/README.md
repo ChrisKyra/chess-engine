@@ -72,9 +72,19 @@ rise, because it is the main thread's alone: the helpers skip depths and are oft
 ahead of it, and what they find reaches it through the shared transposition table
 -- deeper stored results, more cutoffs and more singular extensions -- which makes
 its tree wider and parts of it deeper rather than adding to the depth count. The
-match is the measure that counts. Picking the best thread's result instead of
-always the main thread's, and spreading the helpers further apart, are the next
-things to try.
+match is the measure that counts.
+
+**Tried and dropped.** Two standard improvements, each tested with both sides on
+four threads (200 games at 8 s + 0.08 s, one game at a time):
+
+| Change | Against | Score | Elo |
+|---|---|---|---|
+| Best-thread voting: every thread that finished an iteration votes for its move, weighted by depth and score; proven mates first | Engine 12 | 48.8% | −9 ± 32 |
+| + helpers start with wider aspiration windows (25 + 10 per helper) | voting | 50.5% | +4 ± 34 |
+
+Together about −5, within the noise of zero, so neither is in Engine 12: the
+helpers' work already reaches the main thread through the shared table, and at
+this time control the main thread's own move is as good as the vote's.
 
 ## Earlier: Engine 11 (`Engine_11`)
 
