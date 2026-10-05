@@ -956,11 +956,11 @@ public partial class MainWindow : Window
         TimeControlHelp.Text = tc.Kind switch
         {
             TimeControlKind.EngineDecides =>
-                "Each engine gets a plain \"go\" and decides for itself how long to think (Engines 9 and 10: up to 500 ms, " +
+                "Each engine gets a plain \"go\" and decides for itself how long to think (Engines 9 to 11: up to 500 ms, " +
                 "and no new depth after 250 ms).",
             TimeControlKind.MoveTime =>
                 $"Each move: \"go movetime {tc.MoveTimeMs.ToString(CultureInfo.InvariantCulture)}\". The engine may use up to that much; " +
-                "Engines 9 and 10 stop starting new depths after half of it.",
+                "Engines 9 to 11 stop starting new depths after half of it.",
             TimeControlKind.Clock =>
                 $"{tc.Describe()}: each side starts with that much time and gets the increment after every move. The GUI keeps " +
                 "the clocks and sends them with every \"go\"; an engine that runs out loses on time. This is the setting " +
