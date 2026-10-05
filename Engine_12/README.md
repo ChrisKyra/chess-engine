@@ -55,6 +55,27 @@ ordinary games, as expected: these endings are rare in 300 games, and many games
 are adjudicated before they are reached. What the knowledge buys shows in the
 endings themselves (the checks and play-outs above).
 
+### Threads: measured
+
+Engine 12 with `Threads 4` against `Threads 1` on an Apple M4 (four performance
+cores):
+
+| | 1 thread | 4 threads |
+|---|---|---|
+| Speed: 25 positions, 5 s each, median of 3 runs | 2.45 M nodes/s | 10.04 M nodes/s (4.1x) |
+| Average depth the main thread completes | 20.1 | 19.6 |
+| Match, 300 games at 8 s + 0.08 s, one game at a time | | **+215 ± 32 Elo** (77.5%: +176 =113 -11) |
+
+The speed scales almost perfectly, and four threads are worth about +215 Elo at
+this time control (less is usual at longer ones). The reported depth does not
+rise, because it is the main thread's alone: the helpers skip depths and are often
+ahead of it, and what they find reaches it through the shared transposition table
+-- deeper stored results, more cutoffs and more singular extensions -- which makes
+its tree wider and parts of it deeper rather than adding to the depth count. The
+match is the measure that counts. Picking the best thread's result instead of
+always the main thread's, and spreading the helpers further apart, are the next
+things to try.
+
 ## Earlier: Engine 11 (`Engine_11`)
 
 UCI name "Bitboard Engine 11". Based on `../Engine_10`. The search is untouched;
