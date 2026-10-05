@@ -43,5 +43,6 @@ results; see `Engine_12/README.md`.
 
 Run without arguments for the list: engines, games, concurrency, `--tc`,
 `--movetime` or `--nodes`, `--sprt`/`--no-sprt`, `--no-adjudication`,
-`--random-plies`, `--option NAME=VALUE`, `--pgn`, `--datagen`, `--skip-plies`,
-`--report`.
+`--random-plies`, `--option NAME=VALUE` (both engines), `--option1` / `--option2`
+(one engine only, e.g. a different `Threads`, or `UCI_LimitStrength=true` and
+`UCI_Elo=2400` for Stockfish), `--pgn`, `--datagen`, `--skip-plies`, `--report`.

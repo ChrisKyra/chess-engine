@@ -34,19 +34,20 @@ bool stop = false;
 var started = DateTime.Now;
 string name1 = "?", name2 = "?";
 
-async Task<UciEngine> StartEngine(string path)
+async Task<UciEngine> StartEngine(string path, List<(string, string)> ownOptions)
 {
     var engine = new UciEngine(path);
     await engine.StartAsync();
-    foreach (var (name, value) in o.EngineOptions)
+    // Options for both engines first, then this engine's own, which win.
+    foreach (var (name, value) in o.EngineOptions.Concat(ownOptions))
         await engine.SetOptionAsync(name, value);
     return engine;
 }
 
 async Task Worker()
 {
-    await using var a = await StartEngine(o.Engine1);
-    await using var b = await StartEngine(o.Engine2);
+    await using var a = await StartEngine(o.Engine1, o.Engine1Options);
+    await using var b = await StartEngine(o.Engine2, o.Engine2Options);
     lock (gate) { name1 = a.Name; name2 = b.Name; }
     var adjudicator = new Adjudicator();
 
@@ -186,7 +187,7 @@ sealed class Options
     public double Elo0, Elo1 = 10;
     public bool UseSprt = true, Adjudicate = true;
     public string? PgnFile, DataFile;
-    public List<(string, string)> EngineOptions = [];
+    public List<(string, string)> EngineOptions = [], Engine1Options = [], Engine2Options = [];
 
     public const string Usage = """
         usage: match-runner --engine1 PATH --engine2 PATH [options]
@@ -200,6 +201,8 @@ sealed class Options
           --no-adjudication    play every game to its end
           --random-plies N     random legal moves after each opening (default 0)
           --option NAME=VALUE  UCI option for both engines (repeatable), e.g. Threads=1
+          --option1 NAME=VALUE UCI option for engine 1 only (repeatable; overrides --option)
+          --option2 NAME=VALUE UCI option for engine 2 only, e.g. UCI_Elo=2400
           --pgn FILE           append every game to FILE
           --datagen FILE       append quiet positions with the game result ("FEN;1.0")
           --skip-plies N       with --datagen, plies after the opening not recorded (default 8)
@@ -237,9 +240,11 @@ sealed class Options
                 case "--no-sprt": o.UseSprt = false; break;
                 case "--no-adjudication": o.Adjudicate = false; break;
                 case "--random-plies": o.RandomPlies = int.Parse(Next(), inv); break;
-                case "--option":
+                case "--option" or "--option1" or "--option2":
+                    var target = args[i] == "--option1" ? o.Engine1Options
+                               : args[i] == "--option2" ? o.Engine2Options : o.EngineOptions;
                     var kv = Next().Split('=', 2);
-                    o.EngineOptions.Add((kv[0], kv.Length > 1 ? kv[1] : ""));
+                    target.Add((kv[0], kv.Length > 1 ? kv[1] : ""));
                     break;
                 case "--pgn": o.PgnFile = Next(); break;
                 case "--datagen": o.DataFile = Next(); o.UseSprt = false; break;
