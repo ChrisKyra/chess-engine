@@ -429,7 +429,7 @@
                 <StackPanel Spacing="10">
                   <TextBlock Classes="heading" Text="ENGINE SPEED" />
                   <TextBlock x:Name="SpeedSetup" Classes="muted" TextWrapping="Wrap" />
-                  <Grid ColumnDefinitions="*,48,44,64,76,64" RowDefinitions="Auto,8,Auto,8,Auto">
+                  <Grid ColumnDefinitions="*,40,58,66,76,64" RowDefinitions="Auto,8,Auto,8,Auto">
                     <TextBlock Grid.Column="1" Classes="columnHead" Text="Threads" />
                     <TextBlock Grid.Column="2" Classes="columnHead" Text="Moves" />
                     <TextBlock Grid.Column="3" Classes="columnHead" Text="Time/move" />

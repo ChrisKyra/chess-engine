@@ -754,8 +754,8 @@ public partial class MainWindow : Window
         SpeedPerMove2.Text = match?.Engine2Speed.DescribeNodesPerMove() ?? "—";
         SpeedTime1.Text = match?.Engine1Speed.DescribeTimePerMove() ?? "—";
         SpeedTime2.Text = match?.Engine2Speed.DescribeTimePerMove() ?? "—";
-        SpeedMoves1.Text = match?.Engine1Speed.Searches.ToString(inv) ?? "—";
-        SpeedMoves2.Text = match?.Engine2Speed.Searches.ToString(inv) ?? "—";
+        SpeedMoves1.Text = match is null ? "—" : MoveCount(match.Engine1Speed.Searches);
+        SpeedMoves2.Text = match is null ? "—" : MoveCount(match.Engine2Speed.Searches);
 
         // Before a match, the threads and games at once the next one would use.
         var threads1 = match is not null ? match.Engine1Threads : controller.EngineOptionValue(controller.Slots[0], "Threads");
@@ -822,6 +822,11 @@ public partial class MainWindow : Window
             }
         }
     }
+
+    // Move counts up to 99,999 in full; beyond that as "123k", so the column never overflows.
+    private static string MoveCount(int moves) =>
+        moves < 100_000 ? moves.ToString(CultureInfo.InvariantCulture)
+                        : (moves / 1000).ToString(CultureInfo.InvariantCulture) + "k";
 
     private static int ParseThreads(string? value) =>
         int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? Math.Max(1, n) : 1;
