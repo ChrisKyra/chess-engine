@@ -41,7 +41,7 @@ in `uci.cpp`, and keep Engine 11 as the one to test against.
 ## Testing and tuning
 
     cd tools/match-runner
-    dotnet run -c Release -- --engine1 ../../Engine_12/engine --engine2 ../../Engine_11/engine \
+    dotnet run -c Release -- --engine1 /path/to/new/engine --engine2 ../../Engine_11/engine \
         --tc 8+0.08 --concurrency 8 --sprt 0,10 --games 300 --option Threads=1
 
 plays engine matches from the command line with the GUI's openings, clocks, SPRT
@@ -54,8 +54,8 @@ tuned on. See `tools/match-runner/README.md`.
     dotnet run --project src/ChessGui    # build and start
     ./build-mac-app.sh                   # Chess.app on the Desktop, with Engine 11 bundled
 
-On the Engines tab, Load... two engines, e.g. `Engine_11/engine` and
-`Engine_10/engine` (build them first). The Match tab plays one against the
+On the Engines tab, Load... two engines, e.g. `Engine_11/engine` and an older
+version or Stockfish (build them first). The Match tab plays one against the
 other from 293 openings at a chosen time control (a clock, a fixed time or node
 count per move, or the engine's own choice) and shows the score, an Elo estimate,
 an SPRT that can stop the match once it has an answer, each engine's threads, time,
