@@ -39,10 +39,26 @@ and the engine's move is not a capture or promotion. `Engine_12`'s tuner
 (`make tuner && ./tuner tune positions.txt`) then fits the evaluation to those
 results; see `Engine_12/README.md`.
 
+## Tuning search parameters (SPSA)
+
+    dotnet run -c Release -- --engine1 ../../Engine_13/engine-spsa --spsa ../../Engine_13/spsa_params.txt \
+        --spsa-out tuned_params.txt --games 20000 --tc 2+0.02 --concurrency 8 --option Threads=1
+
+tunes the engine's search parameters the way Stockfish's Fishtest does. The
+engine has to be the SPSA build (`make spsa`), which offers each parameter as a
+UCI option. It plays itself in pairs of games (one opening, both colours): for
+every pair each parameter is nudged up for one side and down for the other, in
+random directions, and the pair's result moves every parameter towards the side
+that did better. The nudges and steps shrink as the run goes on. The parameter
+file lists `NAME start min max c_end` per line, `c_end` being the final nudge; the
+current values are written to `--spsa-out` every 100 pairs and at the end, in the
+same format, so a run can be continued from them.
+
 ## Options
 
 Run without arguments for the list: engines, games, concurrency, `--tc`,
 `--movetime` or `--nodes`, `--sprt`/`--no-sprt`, `--no-adjudication`,
 `--random-plies`, `--option NAME=VALUE` (both engines), `--option1` / `--option2`
 (one engine only, e.g. a different `Threads`, or `UCI_LimitStrength=true` and
-`UCI_Elo=2400` for Stockfish), `--pgn`, `--datagen`, `--skip-plies`, `--report`.
+`UCI_Elo=2400` for Stockfish), `--pgn`, `--datagen`, `--skip-plies`, `--report`,
+`--spsa`, `--spsa-out`.

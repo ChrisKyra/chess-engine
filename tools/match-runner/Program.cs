@@ -7,6 +7,7 @@ using ChessCore.Uci;
 //
 //   testing:   match-runner --engine1 new/engine --engine2 old/engine --tc 8+0.08 --sprt 0,10
 //   tuning:    match-runner --engine1 e/engine --engine2 e/engine --nodes 10000 --datagen positions.txt
+//   search:    match-runner --engine1 e/engine-spsa --spsa params.txt --games 20000 --tc 2+0.02
 //
 // Run without arguments for the full list of options (see README.md).
 
@@ -22,6 +23,9 @@ catch (ArgumentException ex)
     Console.Error.WriteLine(Options.Usage);
     return 1;
 }
+
+if (o.SpsaFile is not null)
+    return await Spsa.RunAsync(o);
 
 var sprt = new Sprt(new SprtSettings { Elo0 = o.Elo0, Elo1 = o.Elo1 });
 var score = new MatchScore();
@@ -63,47 +67,9 @@ async Task Worker()
         // Each opening is played twice, Engine 1 with White first.
         var (_, opening) = Openings.ForMatchGame(index / 2, o.RandomPlies);
         bool engine1White = index % 2 == 0;
-        var game = new Game(Position.Start);
-        foreach (var move in opening) game.Play(move);
-        var clock = new GameClock(o.TimeControl);
-        adjudicator.Reset();
-        var quietPositions = new List<string>();
-        await a.NewGameAsync();
-        await b.NewGameAsync();
-
-        while (!game.Result.IsOver)
-        {
-            var position = game.Position;
-            var engine = (position.SideToMove == PieceColor.White) == engine1White ? a : b;
-            var recorder = new LastScore();
-            var best = await engine.SearchAsync(game.ToUciPositionCommand(), clock.Limits(), recorder);
-
-            if (!clock.Charge(position.SideToMove, best.Elapsed))
-            {
-                game.Adjudicate(GameClock.TimeoutResult(position, position.SideToMove));
-                break;
-            }
-            if (position.FindUciMove(best.Move) is not { } played)
-            {
-                game.Adjudicate(GameResult.Win(position.SideToMove.Opposite(), GameEndReason.IllegalMove));
-                Console.WriteLine($"ILLEGAL MOVE by {engine.Name}: {best.Move} in {position.ToFen()}");
-                break;
-            }
-
-            // For tuning: quiet positions only -- not in check, and the engine's choice is
-            // neither a capture nor a promotion, so the evaluation is not mid-exchange.
-            if (o.DataFile is not null && game.PlyCount >= opening.Count + o.DataSkipPlies && !position.IsInCheck
-                && position[played.To].IsEmpty && played.Promotion == PieceType.None && !IsEnPassant(position, played))
-                quietPositions.Add(position.ToFen());
-
-            game.Play(played);
-            if (o.Adjudicate)
-            {
-                adjudicator.Record(position.SideToMove, recorder.Info);
-                if (!game.Result.IsOver && adjudicator.Verdict(game.PlyCount) is { } verdict)
-                    game.Adjudicate(verdict);
-            }
-        }
+        var quietPositions = o.DataFile is not null ? new List<string>() : null;
+        var game = engine1White ? await GamePlay.PlayAsync(a, b, opening, o, adjudicator, quietPositions)
+                                : await GamePlay.PlayAsync(b, a, opening, o, adjudicator, quietPositions);
 
         var result = game.Result;
         double points1 = result.Outcome switch
@@ -122,7 +88,7 @@ async Task Worker()
                 File.AppendAllText(o.PgnFile, game.ToPgn(white, black, eventName: $"{name1} vs {name2}",
                     round: (index + 1).ToString(inv), timeControl: o.TimeControl.PgnTag) + "\n");
             }
-            if (o.DataFile is not null && quietPositions.Count > 0)
+            if (o.DataFile is not null && quietPositions is { Count: > 0 })
             {
                 File.AppendAllLines(o.DataFile, quietPositions.Select(fen => $"{fen};{label}"));
                 positionsWritten += quietPositions.Count;
@@ -143,9 +109,6 @@ async Task Worker()
     }
 }
 
-static bool IsEnPassant(Position position, Move move) =>
-    position[move.From].Type == PieceType.Pawn && Square.File(move.From) != Square.File(move.To) && position[move.To].IsEmpty;
-
 void Report()
 {
     var elo = score.EloEstimate();
@@ -164,21 +127,6 @@ Console.WriteLine($"{name1} vs {name2} at {o.TimeControl.Describe()}" +
 Console.WriteLine(endings.Describe());
 return 0;
 
-/// <summary>Keeps the last info line that carried a score, for adjudication.</summary>
-sealed class LastScore : IProgress<UciInfo>
-{
-    private readonly Lock gate = new();
-    private UciInfo? info;
-
-    public UciInfo? Info { get { lock (gate) return info; } }
-
-    public void Report(UciInfo value)
-    {
-        if (value.HasScore && !value.IsLowerBound && !value.IsUpperBound)
-            lock (gate) info = value;
-    }
-}
-
 sealed class Options
 {
     public string Engine1 = "", Engine2 = "";
@@ -186,7 +134,7 @@ sealed class Options
     public MatchTimeControl TimeControl = new() { Kind = TimeControlKind.Clock, BaseMs = 8000, IncrementMs = 80 };
     public double Elo0, Elo1 = 10;
     public bool UseSprt = true, Adjudicate = true;
-    public string? PgnFile, DataFile;
+    public string? PgnFile, DataFile, SpsaFile, SpsaOutput;
     public List<(string, string)> EngineOptions = [], Engine1Options = [], Engine2Options = [];
 
     public const string Usage = """
@@ -207,6 +155,9 @@ sealed class Options
           --datagen FILE       append quiet positions with the game result ("FEN;1.0")
           --skip-plies N       with --datagen, plies after the opening not recorded (default 8)
           --report N           progress line every N games (default 20)
+          --spsa FILE          SPSA-tune the parameters listed in FILE ("NAME start min max c_end" per
+                               line) with engine 1 playing itself; --games is the number of games
+          --spsa-out FILE      write the current values to FILE every 100 pairs and at the end
         """;
 
     public static Options Parse(string[] args)
@@ -250,11 +201,13 @@ sealed class Options
                 case "--datagen": o.DataFile = Next(); o.UseSprt = false; break;
                 case "--skip-plies": o.DataSkipPlies = int.Parse(Next(), inv); break;
                 case "--report": o.ReportEvery = Math.Max(1, int.Parse(Next(), inv)); break;
+                case "--spsa": o.SpsaFile = Next(); o.UseSprt = false; break;
+                case "--spsa-out": o.SpsaOutput = Next(); break;
                 default: throw new ArgumentException($"unknown option {args[i]}");
             }
         }
-        if (o.Engine1.Length == 0 || o.Engine2.Length == 0)
-            throw new ArgumentException("--engine1 and --engine2 are required");
+        if (o.Engine1.Length == 0 || (o.Engine2.Length == 0 && o.SpsaFile is null))
+            throw new ArgumentException("--engine1 and --engine2 are required (--spsa needs only --engine1)");
         return o;
     }
 }

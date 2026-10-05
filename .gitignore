@@ -1,6 +1,7 @@
 # Build output: recreated by `make` (engines) and `dotnet build` / build-mac-app.sh (GUI).
 Engine_*/engine
 Engine_*/tuner
+Engine_*/engine-spsa
 tuned.txt
 *.o
 bin/
