@@ -2,6 +2,7 @@
 Engine_*/engine
 Engine_*/tuner
 Engine_*/engine-spsa
+Engine_*/finish/
 tuned.txt
 *.o
 bin/
