@@ -1,6 +1,7 @@
 #include "search.h"
 #include "eval.h"
 #include "movegen.h"
+#include "thread.h"
 
 #include <algorithm>
 #include <atomic>
@@ -1533,7 +1534,7 @@ Result think(Position& pos, const Limits& limits) {
 
     searching.store(true);
 
-    std::vector<std::thread> helpers;
+    std::vector<SearchThread> helpers;
     for (size_t i = 1; i < searchers.size(); ++i)
         helpers.emplace_back([&limits, i] { iterate(*searchers[i], limits); });
 
@@ -1541,7 +1542,7 @@ Result think(Position& pos, const Limits& limits) {
 
     // Thread 0 has its answer, so the helpers' work is no longer needed.
     searching.store(false);
-    for (std::thread& helper : helpers)
+    for (SearchThread& helper : helpers)
         helper.join();
 
     Searcher& main_thread = *searchers[0];

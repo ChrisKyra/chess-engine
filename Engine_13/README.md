@@ -408,6 +408,11 @@ lookup, never a wrong answer. Buckets are 64 bytes, one cache line each. Node co
 are summed across threads for `info` and `go nodes`. With more than one thread a
 search is not reproducible move for move.
 
+Every searching thread, the main search thread included, is started with an 8 MB
+stack (`thread.h`). A thread made the usual way gets the system's default, only
+512 KB on macOS, and the search recurses up to 128 plies deep at about 5 KB a
+ply, so a long forced line could overflow it and crash the engine.
+
 ### Tuning the evaluation (Texel)
 
 The tuner (`make tuner`) is the engine built with an **evaluation trace**: every
@@ -450,6 +455,7 @@ back into `search.cpp`. The values in `search.cpp` come from a 10,000-game run a
 | `bitbase.h/.cpp` | King and pawn against king, solved at start-up |
 | `eval.h/.cpp` | The evaluation, the known endings, and the tuning trace (tuner build only) |
 | `search.h/.cpp` | Transposition table, move ordering, alpha-beta, quiescence search, time management, threads, search parameters |
+| `thread.h` | Threads with an 8 MB stack, for the search |
 | `perft.h/.cpp` | Perft counting and the correctness suite |
 | `uci.cpp` | The UCI protocol, the benchmark and `main()` |
 | `tune.cpp` | The Texel tuner and `explain` (tuner build only) |
@@ -658,6 +664,15 @@ comments.
 | `set_time_limits(s, pos, limits)` | Turns `go`'s limits into a soft limit (no new iteration past it) and a hard limit (stop), for a fixed move time or a clock. |
 | `allocate_tt(mb)` | Resizes the table. |
 | `iterate(s, limits)` | One thread's iterative deepening with aspiration windows: records the best move found so far within an iteration, keeps it if the iteration is cut off, scales the soft limit by the stability of the best move and the score, and reports each finished depth (thread 0). Helper threads skip depths on their own pattern. |
+
+### `thread.h` — threads with room for a deep search
+
+| Function | What it does |
+|---|---|
+| `SearchThread(fn)` | Starts `fn` on a new thread with an 8 MB stack (`STACK_SIZE`), where `std::thread` would give the system default (512 KB on macOS), too little for a search 128 plies deep. If no thread can be made, runs `fn` on the calling thread instead. On Windows (1 MB default) it is a plain `std::thread`. |
+| `join()` / `joinable()` | Waits for the thread to finish; whether there is a thread still to wait for. |
+| move constructor / move assignment | Hands the thread over, as with `std::thread`, so threads can be kept in a `std::vector`. A running thread must be joined before it is replaced. |
+| `run(arg)` | The new thread's entry point: runs the task and frees it. |
 
 ### `perft.h` / `perft.cpp` — proving the move generator
 

@@ -4,6 +4,7 @@
 #include "perft.h"
 #include "position.h"
 #include "search.h"
+#include "thread.h"
 
 #include <algorithm>
 #include <cctype>
@@ -29,8 +30,9 @@ constexpr int DEFAULT_CONTEMPT = 25;
 constexpr int MAX_MOVE_OVERHEAD_MS = 5000;
 
 // The search runs on this thread, so "stop", "isready", "ponderhit" and "quit"
-// are read and answered while it thinks.
-std::thread search_thread;
+// are read and answered while it thinks.  A SearchThread, not a std::thread,
+// for the larger stack a deep search needs (see thread.h).
+SearchThread search_thread;
 
 // True while the running search came from "go infinite": it never ends by
 // itself, so a command that waits for it would wait forever.
@@ -211,7 +213,7 @@ void cmd_go(Position& pos, std::istringstream& in) {
 
     // The search works on its own copy of the position, so nothing it touches
     // is shared with this thread while it runs.
-    search_thread = std::thread([root = pos, limits]() mutable {
+    search_thread = SearchThread([root = pos, limits]() mutable {
         Search::Result result = Search::think(root, limits);
 
         // "go infinite" must not answer before "stop", and "go ponder" not
