@@ -9,7 +9,7 @@ set -euo pipefail
 
 GUI_DIR="$(cd "$(dirname "$0")" && pwd)"
 # The newest engine version. Change this line to bundle a different one.
-ENGINE_DIR="$GUI_DIR/../Engine_12"
+ENGINE_DIR="$GUI_DIR/../Engine_13"
 DEST="${1:-$HOME/Desktop}"
 APP="$DEST/Chess.app"
 DOTNET="$(command -v dotnet || echo "$HOME/.dotnet/dotnet")"

@@ -202,19 +202,71 @@ bool tt_cutoff(const TTData& d, int score, int alpha, int beta) {
 
 // ---------------------------------------------------------------------------
 // Pruning and reduction parameters
+//
+// Every number the search's pruning, reductions and extensions depend on.  In
+// the engine they are constants.  In the SPSA build (make spsa, SEARCH_TUNE)
+// each SEARCH_PARAM becomes a variable and a UCI option of the same name, so the
+// match runner's --spsa mode can tune them over thousands of games; the tuned
+// values are then written back here.
 // ---------------------------------------------------------------------------
 
-// Futility pruning: at depth 1-3, if the static evaluation plus this margin
-// cannot reach alpha, quiet moves are not expected to help.
-constexpr int FUTILITY_MARGIN[4] = { 0, 120, 220, 320 };
+#ifdef SEARCH_TUNE
+bool register_param(const char* name, int* value, int min, int max) {
+    tunables().push_back({ name, value, *value, min, max });
+    return true;
+}
+#define SEARCH_PARAM(name, value, min, max) \
+    int name = value;                       \
+    const bool name##_registered = register_param(#name, &name, min, max);
+#else
+#define SEARCH_PARAM(name, value, min, max) constexpr int name = value;
+#endif
+
+// Futility pruning: at depth 1-3, quiet moves are skipped when the estimate plus
+// FUTILITY_BASE + FUTILITY_PER_PLY * depth cannot reach alpha.
+SEARCH_PARAM(FUTILITY_BASE, 19, 0, 100)
+SEARCH_PARAM(FUTILITY_PER_PLY, 100, 50, 200)
+
+// Reverse futility pruning: up to depth 6, a node whose estimate is this much
+// per ply above beta returns at once.
+SEARCH_PARAM(REVERSE_FUTILITY_PER_PLY, 89, 40, 150)
+
+// Razoring: up to depth 3, a node whose estimate is this much per ply below
+// alpha is checked with quiescence search and dropped if that stays below.
+SEARCH_PARAM(RAZOR_PER_PLY, 246, 100, 500)
+
+// Null move: the verifying search is reduced by NULL_BASE + depth /
+// NULL_DEPTH_DIVISOR, plus one ply for every NULL_EVAL_DIVISOR centipawns the
+// estimate stands above beta (at most three).
+SEARCH_PARAM(NULL_BASE, 2, 2, 5)
+SEARCH_PARAM(NULL_DEPTH_DIVISOR, 4, 2, 6)
+SEARCH_PARAM(NULL_EVAL_DIVISOR, 201, 100, 400)
+
+// Late move reductions: LMR_BASE / 100 + ln(depth) * ln(move number) /
+// (LMR_DIVISOR / 100) plies, minus one ply per LMR_HISTORY_DIVISOR of history.
+SEARCH_PARAM(LMR_BASE, 79, 0, 150)
+SEARCH_PARAM(LMR_DIVISOR, 215, 150, 350)
+SEARCH_PARAM(LMR_HISTORY_DIVISOR, 16418, 8192, 32768)
+
+// Static exchange pruning, up to depth 8: captures losing more than
+// SEE_CAPTURE_PER_PLY per ply and quiet moves losing more than SEE_QUIET_PER_PLY2
+// times depth squared are skipped.
+SEARCH_PARAM(SEE_CAPTURE_PER_PLY, 102, 50, 200)
+SEARCH_PARAM(SEE_QUIET_PER_PLY2, 39, 20, 80)
+constexpr int SEE_PRUNE_DEPTH = 8;
+
+// Singular extensions: tried from SINGULAR_DEPTH up, against a bar of the table
+// score minus SINGULAR_MARGIN centipawns per ply.
+SEARCH_PARAM(SINGULAR_DEPTH, 8, 6, 10)
+SEARCH_PARAM(SINGULAR_MARGIN, 2, 1, 4)
+
+// The first aspiration window around the previous iteration's score, and the
+// margin quiescence search's delta pruning allows above the captured piece.
+SEARCH_PARAM(ASPIRATION_WINDOW, 21, 10, 50)
+SEARCH_PARAM(DELTA_MARGIN, 208, 100, 400)
 
 // Late-move pruning: at depth 1-3, quiet moves beyond this many are skipped.
 constexpr int LATE_MOVE_LIMIT[4] = { 0, 6, 10, 16 };
-
-// Static exchange pruning in the main search: up to this depth, captures losing
-// more than SEE_CAPTURE_MARGIN per ply and quiet moves losing more than
-// SEE_QUIET_MARGIN times depth squared are skipped.
-constexpr int SEE_PRUNE_DEPTH = 8;
 
 // Time management on a clock: the soft limit is multiplied by STABILITY_SCALE,
 // indexed by how many iterations in a row ended on the same best move (4 or
@@ -224,10 +276,11 @@ constexpr double STABILITY_SCALE[5] = { 1.5, 1.2, 1.0, 0.85, 0.75 };
 constexpr int SCORE_DROP_MARGIN = 30;
 constexpr double SCORE_DROP_SCALE = 1.3;
 
-// Singular extensions are tried from this depth up.
-constexpr int SINGULAR_DEPTH = 8;
-constexpr int SEE_CAPTURE_MARGIN = 100;
-constexpr int SEE_QUIET_MARGIN = 40;
+// Correction history: entries per side, the unit of an entry, and the largest
+// correction in centipawns.
+constexpr int CORRECTION_SIZE = 16384;
+constexpr int CORRECTION_GRAIN = 64;
+constexpr int CORRECTION_MAX = 256;
 
 // History scores are kept within +-HISTORY_MAX (see update_history).
 constexpr int HISTORY_MAX = 16384;
@@ -236,14 +289,16 @@ constexpr int HISTORY_MAX = 16384;
 // both, so deep searches reduce late moves more, but never explosively.
 int REDUCTIONS[64][64];
 
+void init_reductions() {
+    for (int d = 0; d < 64; ++d)
+        for (int m = 0; m < 64; ++m)
+            REDUCTIONS[d][m] = (d == 0 || m == 0)
+                ? 0
+                : int(LMR_BASE / 100.0 + std::log(double(d)) * std::log(double(m)) / (LMR_DIVISOR / 100.0));
+}
+
 struct ReductionsInit {
-    ReductionsInit() {
-        for (int d = 0; d < 64; ++d)
-            for (int m = 0; m < 64; ++m)
-                REDUCTIONS[d][m] = (d == 0 || m == 0)
-                    ? 0
-                    : int(0.75 + std::log(double(d)) * std::log(double(m)) / 2.25);
-    }
+    ReductionsInit() { init_reductions(); }
 } reductions_init;
 
 // ---------------------------------------------------------------------------
@@ -338,6 +393,11 @@ struct Searcher {
     // "go searchmoves": the only root moves considered (empty: all of them).
     std::vector<Move> searchmoves;
 
+    // The best root move of the iteration in progress, once one has finished
+    // with an exact score; MOVE_NONE until then.  Kept if the iteration is cut off.
+    Move partial_best = MOVE_NONE;
+    int partial_score = 0;
+
     int64_t soft_limit = 0;   // do not start a new iteration past this (before scaling, see below)
     int64_t hard_limit = 0;   // abort immediately past this
 
@@ -364,6 +424,13 @@ struct Searcher {
     // Capture history: how well a capture (piece, destination, captured type)
     // has done, used to order captures of equal victim and attacker.
     int16_t capture_history[PIECE_NB][SQUARE_NB][PIECE_TYPE_NB] = {};
+
+    // Correction history: for each pawn structure (hashed) and side to move, a
+    // running average of how far the search's result has differed from the
+    // static evaluation, in 1/CORRECTION_GRAIN centipawns.  Added to the
+    // evaluation, it corrects what the evaluation systematically gets wrong
+    // about a structure, which every pruning decision then benefits from.
+    int32_t correction[COLOR_NB][CORRECTION_SIZE] = {};
 
     // The quiet move that last refuted a move, indexed by that move's piece
     // and destination square.
@@ -409,6 +476,7 @@ struct Searcher {
         std::memset(history, 0, sizeof(history));
         std::memset(continuation, 0, sizeof(continuation));
         std::memset(capture_history, 0, sizeof(capture_history));
+        std::memset(correction, 0, sizeof(correction));
         for (auto& by_square : counter_moves)
             std::fill(std::begin(by_square), std::end(by_square), MOVE_NONE);
         for (int i = 0; i < MAX_PLY + 4; ++i) stack[i] = Stack();
@@ -485,6 +553,38 @@ int continuation_score(Searcher& s, int ply, Piece piece, Square to) {
 // The piece type a capture takes (a pawn for en passant).
 PieceType captured_type(const Position& pos, Move m) {
     return m.is_en_passant() ? PAWN : type_of(pos.piece_on(m.to()));
+}
+
+// Which correction entry a position uses: its pawn structure, hashed.
+size_t correction_index(const Position& pos) {
+    U64 key = pos.pieces(WHITE, PAWN) * 0x9E3779B97F4A7C15ULL ^ pos.pieces(BLACK, PAWN) * 0xC2B2AE3D27D4EB4FULL;
+    key ^= key >> 29;
+    key *= 0xBF58476D1CE4E5B9ULL;
+    key ^= key >> 32;
+    return size_t(key & (CORRECTION_SIZE - 1));
+}
+
+// The correction for this position, in centipawns.
+int correction_value(const Searcher& s, const Position& pos) {
+    return s.correction[pos.side_to_move()][correction_index(pos)] / CORRECTION_GRAIN;
+}
+
+// The static evaluation the search works with: the evaluation, faded by the
+// fifty-move clock, plus the correction for its pawn structure.  Mate and
+// known-win scores are left alone.
+int corrected_eval(const Searcher& s, const Position& pos, int raw_eval) {
+    const int faded = Eval::fifty_move_scale(raw_eval, pos);
+    if (std::abs(faded) >= 5000) return faded;
+    return faded + correction_value(s, pos);
+}
+
+// Moves a position's correction towards the difference between what the
+// search found and what the evaluation said, weighted by the depth searched.
+void update_correction(Searcher& s, const Position& pos, int search_score, int raw_eval, int depth) {
+    const int diff = std::clamp(search_score - Eval::fifty_move_scale(raw_eval, pos), -CORRECTION_MAX, CORRECTION_MAX);
+    const int weight = std::min(depth + 1, 16);
+    int32_t& entry = s.correction[pos.side_to_move()][correction_index(pos)];
+    entry = (entry * (256 - weight) + diff * CORRECTION_GRAIN * weight) / 256;
 }
 
 // The counter move to the opponent's previous move, if any.
@@ -615,7 +715,7 @@ int qsearch(Searcher& s, Position& pos, int alpha, int beta, int ply) {
         // Standing pat: the side to move is not obliged to capture, so the
         // static evaluation is a lower bound on what it can achieve.
         raw_eval = tt_hit ? tt_data.eval : Eval::evaluate_unscaled(pos);
-        static_eval = Eval::fifty_move_scale(raw_eval, pos);
+        static_eval = corrected_eval(s, pos, raw_eval);
         if (static_eval >= beta) return static_eval;
         if (static_eval > alpha) alpha = static_eval;
         best = static_eval;
@@ -640,7 +740,7 @@ int qsearch(Searcher& s, Position& pos, int alpha, int beta, int ply) {
             // Delta pruning: if winning the piece outright still leaves us far
             // below alpha, the capture cannot rescue the position.
             PieceType victim = m.is_en_passant() ? PAWN : type_of(pos.piece_on(m.to()));
-            if (static_eval + Eval::PIECE_VALUE[victim] + 200 < alpha) continue;
+            if (static_eval + Eval::PIECE_VALUE[victim] + DELTA_MARGIN < alpha) continue;
         }
 
         s.stack[ply].move = m;
@@ -750,8 +850,7 @@ int negamax(Searcher& s, Position& pos, int depth, int alpha, int beta, int ply,
     const int raw_eval = in_check ? -VALUE_INFINITE
                        : tt_hit ? tt_data.eval
                        : Eval::evaluate_unscaled(pos);
-    const int static_eval = in_check ? -VALUE_INFINITE
-                          : Eval::fifty_move_scale(raw_eval, pos);
+    const int static_eval = in_check ? -VALUE_INFINITE : corrected_eval(s, pos, raw_eval);
 
     // ---- internal iterative reduction -------------------------------------
     // Without a move from the table, move ordering here is guesswork, so a
@@ -759,19 +858,42 @@ int negamax(Searcher& s, Position& pos, int depth, int alpha, int beta, int ply,
     // shallower; the next iteration will find a stored move.
     if (depth >= 4 && tt_move.is_none()) --depth;
 
+    // The estimate the pruning below works with: the static evaluation, or the
+    // table's score when that is a bound on the right side of it -- a stored
+    // lower bound above the evaluation, or upper bound below it, says more
+    // about this position than the evaluation does.
+    int eval = static_eval;
+    if (!in_check && tt_hit) {
+        const int tt_score = score_from_tt(tt_data.score, ply);
+        if (std::abs(tt_score) < VALUE_MATE_IN_MAX_PLY
+            && ((tt_data.bound == BOUND_LOWER && tt_score > eval)
+                || (tt_data.bound == BOUND_UPPER && tt_score < eval)))
+            eval = tt_score;
+    }
+
     // ---- forward pruning --------------------------------------------------
     if (!is_pv && !in_check && !singular_search) {
         // Reverse futility: if we are so far ahead that even conceding a large
         // margin leaves us above beta, assume the opponent cannot claw back.
-        if (depth <= 6 && static_eval - 90 * depth >= beta)
-            return static_eval;
+        if (depth <= 6 && eval - REVERSE_FUTILITY_PER_PLY * depth >= beta)
+            return eval;
+
+        // Razoring: so far below alpha near the leaves that only a capture could
+        // help -- check with quiescence search, and give up on the node if even
+        // that stays below alpha.
+        if (depth <= 3 && eval + RAZOR_PER_PLY * depth < alpha) {
+            const int score = qsearch(s, pos, alpha - 1, alpha, ply);
+            if (s.stopped) return 0;
+            if (score < alpha) return score;
+        }
 
         // Null move: give the opponent a free move.  If our position is still
         // above beta after that, the real move will be at least as good.  It is
-        // unsound in zugzwang, hence the requirement for a non-pawn piece.
-        if (allow_null && depth >= 3 && static_eval >= beta
+        // unsound in zugzwang, hence the requirement for a non-pawn piece.  The
+        // further above beta we stand, the more the verifying search is reduced.
+        if (allow_null && depth >= 3 && eval >= beta
             && pos.has_non_pawn_material(pos.side_to_move())) {
-            int reduction = 2 + depth / 4;
+            int reduction = NULL_BASE + depth / NULL_DEPTH_DIVISOR + std::min((eval - beta) / NULL_EVAL_DIVISOR, 3);
             s.stack[ply].move = MOVE_NONE;
             pos.make_null_move();
             int score = -negamax(s, pos, depth - 1 - reduction, -beta, -beta + 1, ply + 1, false);
@@ -794,7 +916,7 @@ int negamax(Searcher& s, Position& pos, int depth, int alpha, int beta, int ply,
     // Low-depth pruning of quiet moves is only safe away from the principal
     // variation, out of check, and when no mate score is at stake.
     const bool can_prune = !is_pv && !in_check && std::abs(alpha) < VALUE_MATE_IN_MAX_PLY;
-    const bool futile = can_prune && depth <= 3 && static_eval + FUTILITY_MARGIN[depth] <= alpha;
+    const bool futile = can_prune && depth <= 3 && eval + FUTILITY_BASE + FUTILITY_PER_PLY * depth <= alpha;
 
     int best_score = -VALUE_INFINITE;
     Move best_move = MOVE_NONE;
@@ -840,7 +962,7 @@ int negamax(Searcher& s, Position& pos, int depth, int alpha, int beta, int ply,
         // depth, so at depth 3 a knight may still be offered).  Checked before
         // the move is made, so it costs no make/unmake.
         if (can_prune && legal_moves > 1 && depth <= SEE_PRUNE_DEPTH
-            && pos.see(m) < (is_quiet ? -SEE_QUIET_MARGIN * depth * depth : -SEE_CAPTURE_MARGIN * depth))
+            && pos.see(m) < (is_quiet ? -SEE_QUIET_PER_PLY2 * depth * depth : -SEE_CAPTURE_PER_PLY * depth))
             continue;
 
         // ---- singular extension -----------------------------------------
@@ -856,7 +978,7 @@ int negamax(Searcher& s, Position& pos, int depth, int alpha, int beta, int ply,
             && tt_data.depth >= depth - 3 && (tt_data.bound & BOUND_LOWER)) {
             const int tt_score = score_from_tt(tt_data.score, ply);
             if (std::abs(tt_score) < VALUE_MATE_IN_MAX_PLY) {
-                const int singular_beta = tt_score - 2 * depth;
+                const int singular_beta = tt_score - SINGULAR_MARGIN * depth;
                 s.stack[ply].excluded = m;
                 const int value = negamax(s, pos, (depth - 1) / 2, singular_beta - 1, singular_beta, ply, false);
                 s.stack[ply].excluded = MOVE_NONE;
@@ -906,7 +1028,7 @@ int negamax(Searcher& s, Position& pos, int depth, int alpha, int beta, int ply,
                 reduction = REDUCTIONS[std::min(depth, 63)][std::min(legal_moves, 63)];
                 if (is_pv) --reduction;
                 if (is_refutation) --reduction;
-                reduction -= history / 16384;
+                reduction -= history / LMR_HISTORY_DIVISOR;
                 reduction = std::clamp(reduction, 0, depth - 2);
             }
 
@@ -934,6 +1056,14 @@ int negamax(Searcher& s, Position& pos, int depth, int alpha, int beta, int ply,
                 for (int next = ply + 1; next < s.pv_length[ply + 1]; ++next)
                     s.pv[ply][next] = s.pv[ply + 1][next];
                 s.pv_length[ply] = s.pv_length[ply + 1];
+
+                // At the root, a move whose search finished inside the window has
+                // an exact score: if the clock stops this iteration later, it is
+                // the best move found so far at this depth.
+                if (root && score < beta) {
+                    s.partial_best = m;
+                    s.partial_score = score;
+                }
             }
 
             if (alpha >= beta) {
@@ -984,6 +1114,16 @@ int negamax(Searcher& s, Position& pos, int depth, int alpha, int beta, int ply,
     const uint8_t bound = (best_score >= beta) ? BOUND_LOWER
                         : (best_score > original_alpha) ? BOUND_EXACT
                         : BOUND_UPPER;
+    // Learn the evaluation's error for this structure -- only from quiet
+    // results (a capture's score is about the capture, not the position) and
+    // only when the score says something: a fail-high below the evaluation or a
+    // fail-low above it does not.
+    if (!in_check && !singular_search && std::abs(best_score) < 5000
+        && (best_move.is_none() || (!best_move.is_capture() && !best_move.is_promotion()))
+        && !(bound == BOUND_LOWER && best_score <= static_eval)
+        && !(bound == BOUND_UPPER && best_score >= static_eval))
+        update_correction(s, pos, best_score, raw_eval, depth);
+
     if (!singular_search) {
         bool store_hit = false;
         TTData store_old;
@@ -1063,8 +1203,11 @@ void set_time_limits(Searcher& s, const Position& pos, const Limits& limits) {
         // Use up to the whole budget, but don't begin a new depth once half of
         // it has gone: the next depth usually costs more than all the earlier
         // ones together, and an unfinished iteration is thrown away.
+        // Use nearly the whole budget: an iteration the clock cuts short is not
+        // wasted, because the best move it had already found is kept (see
+        // iterate), so a new depth is worth starting until 90% has gone.
         s.hard_limit = std::max<int64_t>(limits.movetime - move_overhead_ms, 1);
-        s.soft_limit = std::max<int64_t>(s.hard_limit / 2, 1);
+        s.soft_limit = std::max<int64_t>(s.hard_limit * 9 / 10, 1);
         return;
     }
 
@@ -1162,7 +1305,7 @@ void iterate(Searcher& s, const Limits& limits) {
         s.root_depth = depth;
         int alpha = -VALUE_INFINITE;
         int beta = VALUE_INFINITE;
-        int window = 25;
+        int window = ASPIRATION_WINDOW;
 
         // Aspiration windows: assume the score is close to the last iteration's
         // and search a narrow band around it, widening only on a fail.
@@ -1171,6 +1314,7 @@ void iterate(Searcher& s, const Limits& limits) {
             beta = score + window;
         }
 
+        s.partial_best = MOVE_NONE;
         while (true) {
             int value = negamax(s, pos, depth, alpha, beta, 0, true);
             if (s.stopped) break;
@@ -1181,11 +1325,18 @@ void iterate(Searcher& s, const Limits& limits) {
                                  && s.elapsed() >= BOUND_REPORT_DELAY_MS;
 
             if (value <= alpha) {
+                // Every move fell below the window: nothing from this attempt is
+                // worth keeping over the previous depth's answer.
+                s.partial_best = MOVE_NONE;
                 if (show_bound) report(s, depth, value, " upperbound", "");
                 beta = (alpha + beta) / 2;
                 alpha = std::max(value - window, -VALUE_INFINITE);
                 window *= 2;
             } else if (value >= beta) {
+                // A move beat the window: at least as good as anything else
+                // found, so it is the one to keep if the re-search is cut off.
+                s.partial_best = s.pv[0][0];
+                s.partial_score = value;
                 if (show_bound) report(s, depth, value, " lowerbound", pv_string(s));
                 beta = std::min(value + window, VALUE_INFINITE);
                 window *= 2;
@@ -1195,7 +1346,19 @@ void iterate(Searcher& s, const Limits& limits) {
             }
         }
 
-        if (s.stopped) break;
+        if (s.stopped) {
+            // Cut off in the middle of an iteration: keep the best move it had
+            // already found with a trustworthy score, rather than throwing the
+            // unfinished depth away.
+            if (s.can_stop && !s.partial_best.is_none()) {
+                result.best = s.partial_best;
+                result.score = s.partial_score;
+                const bool line = s.pv[0][0] == s.partial_best && s.pv_length[0] > 1;
+                result.ponder = line ? s.pv[0][1] : MOVE_NONE;
+                if (s.pv[0][0] == s.partial_best) pv = pv_string(s);
+            }
+            break;
+        }
 
         result.best = s.pv[0][0];
         result.score = score;
@@ -1253,6 +1416,15 @@ void iterate(Searcher& s, const Limits& limits) {
 }
 
 } // namespace
+
+#ifdef SEARCH_TUNE
+std::vector<Tunable>& tunables() {
+    static std::vector<Tunable> list;
+    return list;
+}
+
+void apply_tunables() { init_reductions(); }
+#endif
 
 // The stop flag, set by the UCI thread and polled by the search.  It is the
 // only thing the two threads share besides the output lock.

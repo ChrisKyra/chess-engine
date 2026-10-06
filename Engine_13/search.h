@@ -89,4 +89,19 @@ bool pondering();
 // UCI loop's replies never interleave.
 void print_line(const std::string& line);
 
+#ifdef SEARCH_TUNE
+// Only in the SPSA build (make spsa): the search parameters, each exposed as a
+// UCI option so the match runner can tune them.
+struct Tunable {
+    const char* name;
+    int* value;
+    int start, min, max;
+};
+std::vector<Tunable>& tunables();
+
+// Rebuilds whatever is derived from the parameters (the reduction table) after
+// one of them has changed.
+void apply_tunables();
+#endif
+
 } // namespace Search

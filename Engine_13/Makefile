@@ -37,7 +37,21 @@ $(TUNER): $(TUNER_OBJ)
 tuner-%.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(NATIVE) -DEVAL_TRACE -c $< -o $@
 
-clean:
-	rm -f $(OBJ) $(BIN) $(TUNER_OBJ) $(TUNER)
+# The SPSA build: the engine with its search parameters exposed as UCI options
+# (SEARCH_TUNE), for tuning them with the match runner's --spsa mode.
+#   make spsa && ../tools/match-runner/... --spsa params.txt --engine1 ./engine-spsa ...
+SPSA = engine-spsa
+SPSA_OBJ = $(SRC:%.cpp=spsa-%.o)
 
-.PHONY: all test bench clean
+$(SPSA): $(SPSA_OBJ)
+	$(CXX) $(CXXFLAGS) $(NATIVE) $(LDFLAGS) -o $@ $(SPSA_OBJ)
+
+spsa-%.o: %.cpp
+	$(CXX) $(CXXFLAGS) $(NATIVE) -DSEARCH_TUNE -c $< -o $@
+
+spsa: $(SPSA)
+
+clean:
+	rm -f $(OBJ) $(BIN) $(TUNER_OBJ) $(TUNER) $(SPSA_OBJ) $(SPSA)
+
+.PHONY: all test bench clean spsa

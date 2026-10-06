@@ -16,14 +16,14 @@
 
 namespace {
 
-const char* ENGINE_NAME = "Bitboard Engine 12";
+const char* ENGINE_NAME = "Bitboard Engine 13";
 const char* ENGINE_AUTHOR = "built from scratch in C++";
 
 // How long a plain "go" (no limits at all) thinks, in milliseconds.  The GUI
 // sends a plain "go" and leaves the decision to the engine; change it here.
 constexpr int64_t DEFAULT_MOVE_TIME_MS = 500;
 
-constexpr int DEFAULT_HASH_MB = 64;
+constexpr int DEFAULT_HASH_MB = 128;
 constexpr int DEFAULT_MOVE_OVERHEAD_MS = 10;
 constexpr int DEFAULT_CONTEMPT = 25;
 constexpr int MAX_MOVE_OVERHEAD_MS = 5000;
@@ -275,6 +275,19 @@ void cmd_setoption(std::istringstream& in) {
         // Only tells the engine whether the GUI will send "go ponder"; nothing
         // needs preparing.
     } else {
+#ifdef SEARCH_TUNE
+        // The SPSA build: a search parameter, by its exact name.
+        for (const Search::Tunable& t : Search::tunables())
+            if (to_lower(t.name) == key) {
+                if (!parse_int(value, number)) {
+                    Search::print_line("info string " + name + " needs a number, got: " + value);
+                    return;
+                }
+                *t.value = int(std::clamp<int64_t>(number, t.min, t.max));
+                Search::apply_tunables();
+                return;
+            }
+#endif
         Search::print_line("info string unknown option: " + name);
     }
 }
@@ -395,6 +408,12 @@ int main(int argc, char** argv) {
                                + std::to_string(DEFAULT_CONTEMPT)
                                + " min 0 max " + std::to_string(Search::MAX_CONTEMPT));
             Search::print_line("option name Fifty Move Scaling type check default true");
+#ifdef SEARCH_TUNE
+            for (const Search::Tunable& t : Search::tunables())
+                Search::print_line(std::string("option name ") + t.name + " type spin default "
+                                   + std::to_string(*t.value) + " min " + std::to_string(t.min)
+                                   + " max " + std::to_string(t.max));
+#endif
             Search::print_line("option name Clear Hash type button");
             Search::print_line("option name Ponder type check default false");
             Search::print_line("option name Move Overhead type spin default "
