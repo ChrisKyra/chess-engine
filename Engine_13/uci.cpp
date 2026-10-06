@@ -17,7 +17,12 @@
 
 namespace {
 
+#ifdef SEARCH_TUNE
+// The SPSA build names itself differently, so a GUI shows which one is loaded.
+const char* ENGINE_NAME = "Bitboard Engine 13 (SPSA build)";
+#else
 const char* ENGINE_NAME = "Bitboard Engine 13";
+#endif
 const char* ENGINE_AUTHOR = "built from scratch in C++";
 
 // How long a plain "go" (no limits at all) thinks, in milliseconds.  The GUI

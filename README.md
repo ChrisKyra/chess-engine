@@ -64,5 +64,5 @@ engine's own choice) and shows the score, an Elo estimate, an SPRT that can stop
 the match once it has an answer, each engine's threads, time, nodes per move and
 nodes per second, and how the games ended. See `gui/README.md`.
 
-Build output (`engine`, `tuner`, `engine-spsa`, `*.o`, `gui/**/bin`, `gui/**/obj`)
+Build output (`engine`, `tuner`, `engine-spsa`, `*.o`, `*.d`, `gui/**/bin`, `gui/**/obj`)
 is not kept here; the commands above recreate it.

@@ -103,7 +103,8 @@ To play against it, load the `engine` binary as a UCI engine in any GUI (the
 | `Fifty Move Scaling` | check | true | Fades the evaluation towards zero as the fifty-move clock runs down, so shuffling costs the better side its advantage. |
 
 The SPSA build (`make spsa`) adds one spin option per search parameter (see
-[Tuning the search](#tuning-the-search-spsa)).
+[Tuning the search](#tuning-the-search-spsa)) and calls itself "Bitboard Engine 13
+(SPSA build)". It is meant for tuning; for games, load `engine`.
 
 ## How it works
 
@@ -733,7 +734,7 @@ python3 apply_tuned.py tuned.txt eval.cpp && make
 make spsa
 match-runner --engine1 ./engine-spsa --spsa spsa_params.txt --spsa-out tuned_params.txt \
     --games 10000 --tc 2+0.02 --concurrency 8 --option Threads=1
-python3 apply_spsa.py tuned_params.txt search.cpp && make
+python3 apply_spsa.py tuned_params.txt search.cpp && make && make spsa
 ```
 
 `tools/finish-engine.sh` runs the whole sequence — build, a short SPSA check, the

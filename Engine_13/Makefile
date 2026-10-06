@@ -16,8 +16,10 @@ all: $(BIN)
 $(BIN): $(OBJ)
 	$(CXX) $(CXXFLAGS) $(NATIVE) $(LDFLAGS) -o $@ $(OBJ)
 
+# -MMD -MP: each object also writes a .d file listing the headers it includes,
+# so editing a header rebuilds every file that uses it.
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) $(NATIVE) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(NATIVE) -MMD -MP -c $< -o $@
 
 test: $(BIN)
 	./$(BIN) test
@@ -35,7 +37,7 @@ $(TUNER): $(TUNER_OBJ)
 	$(CXX) $(CXXFLAGS) $(NATIVE) $(LDFLAGS) -o $@ $(TUNER_OBJ)
 
 tuner-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) $(NATIVE) -DEVAL_TRACE -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(NATIVE) -DEVAL_TRACE -MMD -MP -c $< -o $@
 
 # The SPSA build: the engine with its search parameters exposed as UCI options
 # (SEARCH_TUNE), for tuning them with the match runner's --spsa mode.
@@ -47,11 +49,13 @@ $(SPSA): $(SPSA_OBJ)
 	$(CXX) $(CXXFLAGS) $(NATIVE) $(LDFLAGS) -o $@ $(SPSA_OBJ)
 
 spsa-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) $(NATIVE) -DSEARCH_TUNE -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(NATIVE) -DSEARCH_TUNE -MMD -MP -c $< -o $@
 
 spsa: $(SPSA)
 
 clean:
-	rm -f $(OBJ) $(BIN) $(TUNER_OBJ) $(TUNER) $(SPSA_OBJ) $(SPSA)
+	rm -f $(OBJ) $(BIN) $(TUNER_OBJ) $(TUNER) $(SPSA_OBJ) $(SPSA) *.d
+
+-include $(OBJ:.o=.d) $(TUNER_OBJ:.o=.d) $(SPSA_OBJ:.o=.d)
 
 .PHONY: all test bench clean spsa

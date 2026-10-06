@@ -14,7 +14,8 @@
 #   spsa    the tuning run: SPSA_GAMES games (default 10000) at SPSA_TC (default 2+0.02),
 #           CONCURRENCY at once (default 8); values saved to finish/tuned_params.txt
 #   apply   keep a copy of the untuned engine, write the tuned values into search.cpp,
-#           rebuild and run the perft suite
+#           rebuild both builds (so engine-spsa starts from the tuned values too) and
+#           run the perft suite
 #   verify  tuned against untuned: SPRT [0, 10], at most 250 games at 8 s + 0.08 s
 #   final   the engine against BASELINE_ENGINE: 400 games at 8 s + 0.08 s, no early stop
 #
@@ -68,7 +69,8 @@ for s in "${STAGES[@]}"; do
       cp "$ENGINE_DIR/engine" "$OUT/engine-untuned"
       cp "$ENGINE_DIR/search.cpp" "$OUT/search-untuned.cpp"
       python3 "$ENGINE_DIR/apply_spsa.py" "$OUT/tuned_params.txt" "$ENGINE_DIR/search.cpp"
-      make -C "$ENGINE_DIR" -s && "$ENGINE_DIR/engine" test | tail -1 && "$ENGINE_DIR/engine" bench | tail -1
+      make -C "$ENGINE_DIR" -s && make -C "$ENGINE_DIR" -s spsa
+      "$ENGINE_DIR/engine" test | tail -1 && "$ENGINE_DIR/engine" bench | tail -1
       ;;
     verify)
       stage "verify (tuned vs untuned)"

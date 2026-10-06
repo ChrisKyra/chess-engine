@@ -5,6 +5,7 @@ Engine_*/engine-spsa
 Engine_*/finish/
 tuned.txt
 *.o
+*.d
 bin/
 obj/
 
