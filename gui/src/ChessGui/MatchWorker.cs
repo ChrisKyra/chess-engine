@@ -92,6 +92,9 @@ internal sealed class MatchWorker(
 
         while (!Game.Result.IsOver)
         {
+            // A paused match waits here, between moves, so no search is cut short and
+            // no clock runs while it waits.
+            await match.WaitWhilePausedAsync(token);
             token.ThrowIfCancellationRequested();
 
             var position = Game.Position;

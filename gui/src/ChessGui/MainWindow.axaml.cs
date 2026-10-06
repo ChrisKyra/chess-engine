@@ -160,6 +160,8 @@ public partial class MainWindow : Window
                 ? "Game stopped — press Start for a new game"
                 : $"Press Start to begin — {side} to move";
         }
+        if (controller.Match is { IsRunning: true, IsPaused: true })
+            return $"{side} to move{check} (match paused)";
         if (controller.ThinkingSlot is { } thinking)
             return $"{side} to move{check} — {thinking.Name} is thinking…";
         if (controller.IsPaused)
@@ -657,6 +659,8 @@ public partial class MainWindow : Window
         MatchStartButton.IsEnabled = !running && bothLoaded;
         MatchStartButton.Content = match is not null && !running ? "Start new match" : "Start match";
         MatchStopButton.IsEnabled = running;
+        MatchPauseButton.IsEnabled = running;
+        MatchPauseButton.Content = running && match!.IsPaused ? "Resume match" : "Pause match";
 
         var score = match?.Engine1;
         ResultName1.Text = $"Engine 1 · {match?.Engine1Name ?? controller.Slots[0].Name}";
@@ -690,7 +694,9 @@ public partial class MainWindow : Window
         MatchProgress.Maximum = match.TotalGames;
         MatchProgress.Value = match.GamesPlayed;
         var timeControl = match.TimeControl.Describe();
-        MatchProgressText.Text = running
+        MatchProgressText.Text = running && match.IsPaused
+            ? $"Paused  ·  {timeControl}  ·  {match.GamesPlayed} of {match.TotalGames} finished — press Resume match to carry on"
+            : running
             ? match.ParallelGames > 1
                 ? $"{timeControl}  ·  {match.ParallelGames} games at once  ·  {match.GamesPlayed} of {match.TotalGames} finished  ·  board shows {match.CurrentOpening}"
                 : $"{timeControl}  ·  {match.GamesPlayed} of {match.TotalGames} finished  ·  {match.CurrentOpening}"
@@ -980,6 +986,9 @@ public partial class MainWindow : Window
                               settings.ToMatchTimeControl(), settings.ToSprtSettings(), settings.SprtStopMatch);
 
     private void OnStopMatch(object? sender, RoutedEventArgs e) => controller.StopMatch();
+
+    private void OnPauseMatch(object? sender, RoutedEventArgs e) =>
+        controller.SetMatchPaused(controller.Match is not { IsPaused: true });
 
     private async void OnSaveMatchPgn(object? sender, RoutedEventArgs e)
     {

@@ -306,6 +306,8 @@ public sealed class GameController : IAsyncDisposable
             StopAnalysis(slot);
         }
         await StopWorkersAsync();
+        // The games waiting on a pause were cancelled with the workers; clear the flag.
+        match?.Resume();
 
         var summary = reason
             ?? (match is not null ? $"Match stopped after {match.GamesPlayed} of {match.TotalGames} games." : "Game stopped.");
@@ -691,6 +693,25 @@ public sealed class GameController : IAsyncDisposable
         await Task.WhenAll(running.Select(w => w.DisposeAsync().AsTask()));
         matchCts?.Dispose();
         matchCts = null;
+    }
+
+    /// <summary>
+    /// Pauses or resumes the running match. Pausing lets every engine finish the move it
+    /// is thinking about, then holds each game before its next move, clocks stopped, until
+    /// it is resumed; the games, results and engine processes are all kept.
+    /// </summary>
+    public void SetMatchPaused(bool paused)
+    {
+        if (Match is not { IsRunning: true } match || match.IsPaused == paused)
+            return;
+        if (paused)
+            match.Pause();
+        else
+            match.Resume();
+        ShowMessage(paused
+            ? $"Match paused after {match.GamesPlayed} of {match.TotalGames} games. The engines finish the move they are thinking about, then wait."
+            : "Match resumed.");
+        Changed();
     }
 
     /// <summary>Ends the match like Quit does; the results so far are kept.</summary>

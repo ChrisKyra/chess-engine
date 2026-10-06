@@ -68,7 +68,7 @@ Typical setups:
   Engine 2 = Stockfish with **Analyse when not playing a move** ticked; set
   Black to Engine 1. The Evaluation card shows both engines' scores and lines.
 - **Engine vs engine:** White = Engine 1, Black = Engine 2. **Swap sides**
-  exchanges colours, **Pause** stops the match.
+  exchanges colours, **Pause** stops the game until you press Resume.
 
 Analysis sends `go infinite` and relies on `stop` to end it, so only turn it on
 for engines that honour `stop` (Stockfish does). An engine that is also playing
@@ -127,6 +127,12 @@ The **Match** tab plays a series of games between Engine 1 and Engine 2 (1000
 by default) and keeps score: wins, losses and draws for each engine, the score
 percentage, Engine 1's results with White and with Black, and an Elo difference
 estimate with a 95% confidence margin.
+
+**Pause match** holds a running match without losing anything: every engine
+finishes the move it is thinking about, then each game waits before its next
+move, with its clocks stopped, until **Resume match**. The games carry on where
+they were, with the same engine processes, scores and SPRT. **Stop match** ends
+the match (the results so far are kept).
 
 **Time control.** Chosen on the Match tab, sent with every `go`:
 
@@ -192,7 +198,7 @@ Two more cards follow:
   of order. Only compare matches that were run with the same games at once and
   threads.
 - Players and engines are locked during a match, background analysis is off, and
-  Pause and Engine move are disabled (match games run on clocks). An engine that
+  the board's Pause and Engine move are disabled (use **Pause match** instead). An engine that
   plays an illegal move loses that game; an engine that crashes stops the match.
 - Every finished game is appended to a PGN file in the `matches` folder next to
   `settings.json`; **Save games as PGN…** copies it elsewhere.

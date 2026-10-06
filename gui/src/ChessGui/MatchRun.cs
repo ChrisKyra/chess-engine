@@ -56,6 +56,43 @@ public sealed class MatchRun(int totalGames, int randomPlies, string engine1Name
 
     public bool IsRunning { get; internal set; }
 
+    /// <summary>
+    /// Paused: each game stops before its next move and waits, with its clocks stopped,
+    /// until the match is resumed. Nothing is lost: the games carry on where they were.
+    /// </summary>
+    public bool IsPaused { get; private set; }
+
+    /// <summary>Completed while the match plays; a new, pending one while it is paused.</summary>
+    private TaskCompletionSource resumed = Released();
+
+    private static TaskCompletionSource Released()
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        gate.SetResult();
+        return gate;
+    }
+
+    /// <summary>Stops every game before its next move. A move being thought about is finished first.</summary>
+    internal void Pause()
+    {
+        if (IsPaused)
+            return;
+        IsPaused = true;
+        resumed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    /// <summary>Lets the games carry on.</summary>
+    internal void Resume()
+    {
+        if (!IsPaused)
+            return;
+        IsPaused = false;
+        resumed.TrySetResult();
+    }
+
+    /// <summary>Returns at once while the match plays; while it is paused, once it is resumed (or cancelled).</summary>
+    internal Task WaitWhilePausedAsync(CancellationToken token) => resumed.Task.WaitAsync(token);
+
     /// <summary>Engine 1's results; Engine 2's are the mirror image.</summary>
     public MatchScore Engine1 { get; } = new();
 
