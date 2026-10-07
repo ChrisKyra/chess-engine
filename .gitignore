@@ -19,3 +19,6 @@ Engine_10/
 Engine_11/
 Engine_12/
 
+
+# Match games saved from the GUI stay on this computer.
+Matches/
