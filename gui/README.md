@@ -58,8 +58,9 @@ The GUI runs up to two engines at once, **Engine 1** and **Engine 2**.
    Pressing Start after Quit begins a fresh game from the same starting position.
 
 Outside matches the GUI doesn't set how long engines think: it sends a plain `go`
-and each engine decides for itself (Engines 9 to 12 think for up to 500 ms per move on a
-plain `go`). Matches have their own time control (see below). Engines can't be loaded, reloaded or unloaded
+and each engine decides for itself (the engine in `../Engine_13` thinks for 500 ms
+per move on a plain `go`; Stockfish searches until it is told to stop, so press
+**Engine move** again — "Move now" — to make it play). Matches have their own time control (see below). Engines can't be loaded, reloaded or unloaded
 while a game or match is in progress, so an engine can't change mid-game.
 
 Typical setups:
@@ -141,7 +142,7 @@ the match (the results so far are kept).
 | Clock (default 10 s + 0.1 s) | `go wtime .. btime .. winc .. binc ..` | testing changes, time management included |
 | Time per move | `go movetime N` | a fixed budget per move, e.g. "how many nodes in 0.5 s" |
 | Nodes per move | `go nodes N` | the same search on any machine, however busy (hides speed differences) |
-| Engine decides | plain `go` | the old behaviour |
+| Engine decides | plain `go` | engines that pick their own time on a plain `go`; not Stockfish, which would never move |
 
 With a clock the GUI keeps both clocks: the time from sending `go` to reading
 `bestmove` (measured on the thread that reads the engine's output, so a busy
