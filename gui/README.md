@@ -185,9 +185,10 @@ Two more cards follow:
   openings (main lines and established sidelines of the Ruy Lopez, Italian,
   Sicilian, French, Caro-Kann, Queen's Gambit, Slav, the Indian defences, the
   English, Réti and more, in `src/ChessCore/Openings.cs`), and each opening is
-  played twice so both engines get it as White. A match uses each opening once
-  until it has played 586 games; only longer matches come back to the start of
-  the list.
+  played twice so both engines get it as White. Every match shuffles the list
+  into a new random order, so each match starts from different openings; within
+  a match each opening is used once until it has played 586 games, and only
+  longer matches come back round (in another order).
 - *Random moves after the opening* (default 0) adds seeded random legal moves to
   each pair's opening. They can be blunders, which decide the game instead of the
   engines, so only use 1 or 2 for matches longer than 586 games.

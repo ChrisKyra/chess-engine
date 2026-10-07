@@ -77,7 +77,7 @@ internal sealed class MatchWorker(
         MatchRun match, int index, Action<MatchWorker> onChanged, CancellationToken token)
     {
         // Each opening is played twice in a row: Engine 1 has White in the first of the pair.
-        var (openingName, openingMoves) = Openings.ForMatchGame(index / 2, match.RandomPlies);
+        var (openingName, openingMoves) = Openings.ForMatchGame(index / 2, match.RandomPlies, match.OpeningSeed);
         Engine1White = index % 2 == 0;
         Opening = openingName;
         IllegalMove = null;

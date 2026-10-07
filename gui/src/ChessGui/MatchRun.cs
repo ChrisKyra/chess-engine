@@ -34,6 +34,12 @@ public sealed class MatchRun(int totalGames, int randomPlies, string engine1Name
     public int RandomPlies { get; } = randomPlies;
 
     /// <summary>
+    /// Shuffles the order of the openings (see <see cref="Openings.ForMatchGame"/>). Each
+    /// match draws a new one, so matches start from different openings.
+    /// </summary>
+    public int OpeningSeed { get; } = Random.Shared.Next(1, int.MaxValue);
+
+    /// <summary>
     /// How many games are played at the same time, each by its own pair of engine
     /// processes. Only the first of them is shown on the board.
     /// </summary>

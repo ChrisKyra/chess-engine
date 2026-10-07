@@ -352,15 +352,23 @@ public static class Openings
 
     /// <summary>
     /// The opening for a pair of match games (both colours play the same one): the book
-    /// line for this pair, followed by <paramref name="randomPlies"/> random legal moves
-    /// chosen with a seed from the pair number, so a match is reproducible.
+    /// line for this pair, followed by <paramref name="randomPlies"/> random legal moves.
     /// </summary>
-    public static (string Name, IReadOnlyList<Move> Moves) ForMatchGame(int pairIndex, int randomPlies)
+    /// <remarks>
+    /// With <paramref name="seed"/> 0 the pairs go through the list in order, from the
+    /// first opening. Any other seed shuffles the order, a different shuffle for each
+    /// seed, so a match with a fresh seed starts from different openings; every opening
+    /// is still used once before any comes round again. The same seed always gives the
+    /// same openings and random moves, so a match can be repeated.
+    /// </remarks>
+    public static (string Name, IReadOnlyList<Move> Moves) ForMatchGame(int pairIndex, int randomPlies, int seed = 0)
     {
-        var (name, uci) = All[pairIndex % All.Count];
+        int round = pairIndex / All.Count;
+        int slot = pairIndex % All.Count;
+        var (name, uci) = All[seed == 0 ? slot : ShuffledOrder(unchecked(seed + round * 7919))[slot]];
         var moves = Parse(uci).ToList();
         var position = moves.Aggregate(Position.Start, (p, m) => p.Play(m));
-        var random = new Random(pairIndex);
+        var random = new Random(seed == 0 ? pairIndex : unchecked(seed * 1_000_003 + pairIndex));
 
         for (int i = 0; i < randomPlies; i++)
         {
@@ -374,5 +382,18 @@ public static class Openings
         }
 
         return (randomPlies > 0 ? $"{name} + {randomPlies} random" : name, moves);
+    }
+
+    /// <summary>The indices of <see cref="All"/> in an order shuffled by <paramref name="seed"/> (Fisher-Yates).</summary>
+    private static int[] ShuffledOrder(int seed)
+    {
+        var order = Enumerable.Range(0, All.Count).ToArray();
+        var random = new Random(seed);
+        for (int i = order.Length - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
+        }
+        return order;
     }
 }

@@ -384,7 +384,7 @@
                   </Grid>
                   </StackPanel>
                   <TextBlock Classes="muted" TextWrapping="Wrap"
-                             Text="Colours alternate every game, and each opening is played twice so both engines get it as White. The SPRT tests whether Engine 1 is at least H1 Elo stronger than Engine 2 (accept H1) or at most H0 (accept H0), with 5% error either way, counting each opening's pair of games together. Random moves after the opening are any legal move, blunders included: leave them at 0 unless the match is longer than 586 games. Several games at once run a separate pair of engine processes per game; only the first game is shown on the board." />
+                             Text="Colours alternate every game, and each opening is played twice so both engines get it as White. Every match plays the openings in a new random order. The SPRT tests whether Engine 1 is at least H1 Elo stronger than Engine 2 (accept H1) or at most H0 (accept H0), with 5% error either way, counting each opening's pair of games together. Random moves after the opening are any legal move, blunders included: leave them at 0 unless the match is longer than 586 games. Several games at once run a separate pair of engine processes per game; only the first game is shown on the board." />
                   <Grid ColumnDefinitions="*,8,*,8,*">
                     <Button x:Name="MatchStartButton" Content="Start match" Click="OnStartMatch" />
                     <Button x:Name="MatchPauseButton" Grid.Column="2" Content="Pause match" Click="OnPauseMatch"
