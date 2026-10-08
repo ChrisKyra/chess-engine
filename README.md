@@ -5,6 +5,7 @@ A C++ chess engine and a C# desktop GUI to play it and run engine matches.
 ```
 Chess Engine/
 ├── Engine_13/             the engine  — "Bitboard Engine 13"
+├── docs/                  engine-13.html: diagrams of how the engine works
 ├── gui/                   C# / Avalonia GUI: play, analyse, and run Engine vs Engine matches
 └── tools/                 command-line matches, data generation and search tuning
     ├── match-runner/
@@ -32,7 +33,11 @@ and pawn against king, the mating patterns against a lone king, and the standard
 draws. The search parameters are tuned by SPSA self-play.
 
 `Engine_13/README.md` explains in detail what the engine does and how, and has a
-reference for every function.
+reference for every function. `docs/engine-13.html` shows the same in diagrams:
+the threads, iterative deepening, every decision at one node of the search, move
+ordering, quiescence search, the evaluation, time management and the shared
+transposition table. Download it and open it in a browser (GitHub shows HTML files
+as source); `docs/build-diagram.py` regenerates it.
 
 ## Testing and tuning
 
