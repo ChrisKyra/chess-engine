@@ -91,13 +91,18 @@ public partial class MainWindow : Window
         };
     }
 
-    /// <summary>The engine shipped inside Chess.app (Contents/Resources, see build-mac-app.sh) or next to the executable.</summary>
+    /// <summary>
+    /// The engine shipped with the GUI: inside Chess.app (Contents/Resources, see
+    /// build-mac-app.sh), or next to the executable, as engine.exe in the Windows zip
+    /// (.github/workflows/windows.yml).
+    /// </summary>
     private static string? BundledEnginePath()
     {
         string[] candidates =
         [
             Path.Combine(AppContext.BaseDirectory, "..", "Resources", "engine"),
             Path.Combine(AppContext.BaseDirectory, "engine"),
+            Path.Combine(AppContext.BaseDirectory, "engine.exe"),
         ];
         return candidates.Select(Path.GetFullPath).FirstOrDefault(File.Exists);
     }

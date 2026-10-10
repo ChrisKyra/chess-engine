@@ -4,6 +4,8 @@
     <OutputType>WinExe</OutputType>
     <RootNamespace>ChessGui</RootNamespace>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- The icon of ChessGui.exe on Windows (macOS uses Chess.icns, see build-mac-app.sh). -->
+    <ApplicationIcon>Assets\Chess.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

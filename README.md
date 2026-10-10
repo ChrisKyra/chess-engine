@@ -62,6 +62,10 @@ engine. The script's header lists the stages.
     dotnet run --project src/ChessGui    # build and start
     ./build-mac-app.sh                   # Chess.app on the Desktop, with the engine bundled
 
+For Windows, the *Windows build* workflow (Actions tab, or a `v*` tag for a
+release) makes `Chess-Windows.zip`: the GUI and the engine, ready to unzip and run
+with nothing to install.
+
 On the Engines tab, Load... two engines, e.g. `Engine_13/engine` and Stockfish
 (build them first). The Match tab plays one against the other from 293 openings at
 a chosen time control (a clock, a fixed time or node count per move, or the

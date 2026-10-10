@@ -670,7 +670,7 @@ comments.
 
 | Function | What it does |
 |---|---|
-| `SearchThread(fn)` | Starts `fn` on a new thread with an 8 MB stack (`STACK_SIZE`), where `std::thread` would give the system default (512 KB on macOS), too little for a search 128 plies deep. If no thread can be made, runs `fn` on the calling thread instead. On Windows (1 MB default) it is a plain `std::thread`. |
+| `SearchThread(fn)` | Starts `fn` on a new thread with an 8 MB stack (`STACK_SIZE`), where `std::thread` would give the system default (512 KB on macOS), too little for a search 128 plies deep. If no thread can be made, runs `fn` on the calling thread instead. It uses POSIX threads on macOS, Linux and Windows with MinGW; only an MSVC build (1 MB default) falls back to a plain `std::thread`. |
 | `join()` / `joinable()` | Waits for the thread to finish; whether there is a thread still to wait for. |
 | move constructor / move assignment | Hands the thread over, as with `std::thread`, so threads can be kept in a `std::vector`. A running thread must be joined before it is replaced. |
 | `run(arg)` | The new thread's entry point: runs the task and frees it. |

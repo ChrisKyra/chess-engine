@@ -4,7 +4,10 @@
 #include <thread>
 #include <utility>
 
-#ifndef _WIN32
+// POSIX threads wherever they exist: macOS, Linux, and MinGW on Windows (whose
+// winpthreads library is linked in statically).  Only MSVC builds go without.
+#if !defined(_WIN32) || defined(__MINGW32__)
+#define SEARCH_THREAD_PTHREAD 1
 #include <pthread.h>
 #endif
 
@@ -14,7 +17,7 @@
 // forced line could overflow it and crash the engine.  Every searching thread
 // is started through this class instead, with an 8 MB stack (only the part a
 // search actually reaches is ever used).  It works like std::thread: start it
-// with a function, join() it, and it can be moved but not copied.  On Windows,
+// with a function, join() it, and it can be moved but not copied.  With MSVC,
 // whose default is 1 MB, it is a plain std::thread.
 class SearchThread {
 public:
@@ -25,7 +28,7 @@ public:
     SearchThread& operator=(const SearchThread&) = delete;
     SearchThread(SearchThread&& other) noexcept { *this = std::move(other); }
 
-#ifdef _WIN32
+#ifndef SEARCH_THREAD_PTHREAD
     explicit SearchThread(std::function<void()> fn) : thread_(std::move(fn)) {}
     SearchThread& operator=(SearchThread&& other) noexcept {
         thread_ = std::move(other.thread_);

@@ -39,6 +39,18 @@ it), and bundles the engine inside the app, which loads it automatically when
 you haven't chosen another engine. Rerun the script after changing the GUI or
 the engine to refresh the app.
 
+### Windows download
+
+`.github/workflows/windows.yml` builds `Chess-Windows.zip` on GitHub's Windows
+machines: `ChessGui.exe` (self-contained, nothing to install), the engine as
+`engine.exe` next to it (loaded automatically as Engine 1), and a README
+(`windows-readme.txt`). Run it from the repository's **Actions** tab (*Windows
+build → Run workflow*, then download the zip from the run's *Artifacts*), or push
+a tag such as `v13.0` to attach the zip to a GitHub release, which anyone can
+download. The engine's perft suite and benchmark run on Windows first. The
+program is not code-signed, so Windows SmartScreen asks once: *More info → Run
+anyway*.
+
 ## Playing against an engine
 
 The GUI runs up to two engines at once, **Engine 1** and **Engine 2**.
