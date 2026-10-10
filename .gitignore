@@ -22,3 +22,6 @@ Engine_12/
 
 # Match games saved from the GUI stay on this computer.
 Matches/
+
+# The Windows download, built by .github/workflows/windows.yml.
+Chess-Windows.zip
